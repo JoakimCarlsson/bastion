@@ -162,6 +162,20 @@ describe('PlayPage phase pill and co-op participant pills (AC1)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Issue #77 — Full-bleed /play layout
+// ---------------------------------------------------------------------------
+
+describe('PlayPage full-bleed layout (issue #77)', () => {
+  it('no longer uses calc(100vh - 8rem) inline style (AC3)', () => {
+    expect(source).not.toContain('calc(100vh - 8rem)');
+  });
+
+  it('uses h-full className instead of inline height style (AC3)', () => {
+    expect(source).toContain('h-full');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // AC2 — keyboard shortcut handler wired via useEffect
 // ---------------------------------------------------------------------------
 

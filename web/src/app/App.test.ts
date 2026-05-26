@@ -37,3 +37,26 @@ describe('App source-read assertions', () => {
 
 // These tests verify the route and AuthNav presence as a source-read check.
 // Browser smoke verification (manual AC2 / AC3) covers the live rendering.
+
+// ---------------------------------------------------------------------------
+// Issue #77 — Full-bleed /play layout
+// ---------------------------------------------------------------------------
+
+describe('App Shell — full-bleed /play layout (issue #77)', () => {
+  it('imports useLocation from react-router-dom', () => {
+    expect(source).toContain('useLocation');
+    expect(source).toContain("from 'react-router-dom'");
+  });
+
+  it("source contains '/play' pathname check", () => {
+    expect(source).toContain("'/play'");
+  });
+
+  it('source contains h-[100dvh] token for play shell', () => {
+    expect(source).toContain('h-[100dvh]');
+  });
+
+  it('source still contains max-w-3xl (AC2 regression guard)', () => {
+    expect(source).toContain('max-w-3xl');
+  });
+});
