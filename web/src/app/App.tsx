@@ -1,4 +1,4 @@
-import { BrowserRouter, Link, Route, Routes, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 import { clearSession } from '../lib/authStore';
 import { useAuth } from '../lib/useAuth';
@@ -53,43 +53,71 @@ function AuthNav() {
 }
 
 // ---------------------------------------------------------------------------
+// Shell — layout wrapper; must run inside <BrowserRouter> to use useLocation
+// ---------------------------------------------------------------------------
+
+function Shell() {
+  const location = useLocation();
+  const isPlay = location.pathname === '/play';
+
+  const header = (
+    <header className="mb-8 border-b border-slate-800 pb-4">
+      <h1 className="mb-4 text-2xl font-semibold tracking-tight">Bastion</h1>
+      <nav className="flex gap-2">
+        <Link to="/" className={navLinkClass}>
+          Home
+        </Link>
+        <Link to="/play" className={navLinkClass}>
+          Play
+        </Link>
+        <Link to="/lobby" className={navLinkClass}>
+          Lobby
+        </Link>
+        <Link to="/leaderboard" className={navLinkClass}>
+          Leaderboard
+        </Link>
+        <AuthNav />
+      </nav>
+    </header>
+  );
+
+  const routes = (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/play" element={<PlayPage />} />
+      <Route path="/lobby" element={<LobbyPage />} />
+      <Route path="/lobby/:id" element={<LobbyRoomPage />} />
+      <Route path="/leaderboard" element={<LeaderboardPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+    </Routes>
+  );
+
+  if (isPlay) {
+    return (
+      <div className="flex h-[100dvh] w-screen flex-col overflow-hidden">
+        {header}
+        <main className="min-h-0 flex-1">{routes}</main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-8">
+      {header}
+      <main className="flex-1">{routes}</main>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // App
 // ---------------------------------------------------------------------------
 
 export function App() {
   return (
     <BrowserRouter>
-      <div className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-8">
-        <header className="mb-8 border-b border-slate-800 pb-4">
-          <h1 className="mb-4 text-2xl font-semibold tracking-tight">Bastion</h1>
-          <nav className="flex gap-2">
-            <Link to="/" className={navLinkClass}>
-              Home
-            </Link>
-            <Link to="/play" className={navLinkClass}>
-              Play
-            </Link>
-            <Link to="/lobby" className={navLinkClass}>
-              Lobby
-            </Link>
-            <Link to="/leaderboard" className={navLinkClass}>
-              Leaderboard
-            </Link>
-            <AuthNav />
-          </nav>
-        </header>
-        <main className="flex-1">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/play" element={<PlayPage />} />
-            <Route path="/lobby" element={<LobbyPage />} />
-            <Route path="/lobby/:id" element={<LobbyRoomPage />} />
-            <Route path="/leaderboard" element={<LeaderboardPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-          </Routes>
-        </main>
-      </div>
+      <Shell />
     </BrowserRouter>
   );
 }

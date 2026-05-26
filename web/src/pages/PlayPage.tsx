@@ -376,7 +376,7 @@ export function PlayPage() {
   }, [towerIds, isStartWaveDisabled]);
 
   return (
-    <section className="flex flex-col gap-3" style={{ height: 'calc(100vh - 8rem)' }}>
+    <section className="flex h-full flex-col gap-3">
       {/* Co-op session banner — shown when ?lobby=<id> is in the URL */}
       {isCoopMode && (
         <div className="rounded bg-blue-900 border border-blue-700 px-4 py-2 text-sm text-blue-200 flex items-center gap-2 flex-wrap">
