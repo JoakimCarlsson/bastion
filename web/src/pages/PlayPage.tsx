@@ -376,67 +376,136 @@ export function PlayPage() {
   }, [towerIds, isStartWaveDisabled]);
 
   return (
-    <section className="flex h-full flex-col gap-3">
-      {/* Co-op session banner — shown when ?lobby=<id> is in the URL */}
-      {isCoopMode && (
-        <div className="rounded bg-blue-900 border border-blue-700 px-4 py-2 text-sm text-blue-200 flex items-center gap-2 flex-wrap">
-          <span className="font-medium">Co-op session:</span>
-          <code className="text-blue-100 text-xs">{lobbyId}</code>
-          <span className={`text-xs ${sessionMirror.connected ? 'text-green-400' : 'text-yellow-400'}`}>
-            {sessionMirror.connected ? 'Live' : 'Connecting…'}
-          </span>
-          {/* Participant pills — AC1 */}
-          {lobbyPlayers.length > 0 && (
-            <div className="flex items-center gap-1 ml-auto flex-wrap" aria-label="Co-op participants">
-              {lobbyPlayers.map((p) => (
-                <span
-                  key={p.player_id}
-                  className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${slotColour(p.slot)}`}
-                  title={`Slot ${p.slot + 1}`}
-                >
-                  {p.display_name}
-                </span>
-              ))}
+    <div className="relative h-full w-full">
+      {/* Canvas — fills the container; sits below the HUD overlay */}
+      <GameCanvasThree
+        map={STARTER_MAP}
+        towers={state.towers}
+        enemies={state.enemies}
+        onCellClick={handleCellClick}
+      />
+
+      {/* End screen — absolute overlay over the canvas */}
+      {showEndScreen && (
+        <EndScreen
+          phase={state.phase as 'gameover' | 'victory'}
+          waveIndex={state.waveIndex}
+          onRestart={soloSession.restart}
+          signedIn={!isCoopMode && signedIn}
+          submitState={submitState}
+          submitError={submitError}
+          leaderboardHref="/leaderboard"
+          onSubmit={() => { void handleSubmitScore(); }}
+        />
+      )}
+
+      {/* HUD overlay — pointer-events-none wrapper; each panel restores pointer-events-auto */}
+      <div className="absolute inset-0 pointer-events-none">
+
+        {/* ── HUD top bar ─────────────────────────────────────────────────── */}
+        <div className="absolute top-2 left-2 right-[296px] pointer-events-auto bg-slate-900/80 backdrop-blur-sm border border-slate-700 rounded-lg px-3 py-2 flex items-center gap-3 flex-wrap">
+          {/* Phase pill */}
+          <PhasePill phase={state.phase} />
+
+          {/* Wave counter */}
+          <div className="flex flex-col items-center min-w-[4rem]">
+            <span className="text-xs text-gray-500 uppercase tracking-wider">Wave</span>
+            <span className="text-2xl font-bold tabular-nums leading-tight">{waveDisplay}</span>
+          </div>
+
+          {/* Gold */}
+          <div className="flex flex-col items-center min-w-[4rem]">
+            <span className="text-xs text-yellow-600 uppercase tracking-wider">
+              {isCoopMode ? 'Shared Gold' : 'Gold'}
+            </span>
+            <span className="text-2xl font-bold tabular-nums text-yellow-400 leading-tight">
+              {state.gold}
+            </span>
+          </div>
+
+          {/* Base HP */}
+          <div className="flex flex-col items-center min-w-[4rem]">
+            <span className="text-xs text-red-600 uppercase tracking-wider">
+              {isCoopMode ? 'Shared Base HP' : 'Base HP'}
+            </span>
+            <span className="text-2xl font-bold tabular-nums text-red-400 leading-tight">
+              {state.baseHp}
+            </span>
+          </div>
+
+          {/* Co-op session banner — shown when ?lobby=<id> is in the URL */}
+          {isCoopMode && (
+            <div className="flex items-center gap-2 flex-wrap ml-2">
+              <span className="font-medium text-blue-200 text-sm">Co-op session:</span>
+              <code className="text-blue-100 text-xs">{lobbyId}</code>
+              <span className={`text-xs ${sessionMirror.connected ? 'text-green-400' : 'text-yellow-400'}`}>
+                {sessionMirror.connected ? 'Live' : 'Connecting…'}
+              </span>
+              {/* Participant pills */}
+              {lobbyPlayers.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap" aria-label="Co-op participants">
+                  {lobbyPlayers.map((p) => (
+                    <span
+                      key={p.player_id}
+                      className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${slotColour(p.slot)}`}
+                      title={`Slot ${p.slot + 1}`}
+                    >
+                      {p.display_name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
 
-      {/* HUD — typographic hierarchy (AC1) */}
-      <div className="flex items-start gap-4 flex-wrap">
-        {/* Phase pill */}
-        <div className="flex flex-col gap-1">
-          <PhasePill phase={state.phase} />
+        {/* ── Right rail (~280 px) ─────────────────────────────────────────── */}
+        <div className="absolute top-2 right-2 bottom-2 w-72 pointer-events-auto bg-slate-900/80 backdrop-blur-sm border border-slate-700 rounded-lg flex flex-col gap-2 p-3 overflow-y-auto">
+          {/* Tower picker — existing buttons rehomed here */}
+          <div className="flex flex-col gap-2">
+            <span className="text-sm text-gray-400 font-medium">Towers</span>
+            {towerDefs.map((def, idx) => {
+              const canAfford = state.gold >= def.cost;
+              const isSelected = def.id === selectedTowerId;
+              return (
+                <button
+                  key={def.id}
+                  onClick={() => handleTowerSelect(def.id)}
+                  aria-label={`${def.name} costs ${def.cost} gold`}
+                  aria-disabled={!canAfford}
+                  title={!canAfford ? `Need ${def.cost - state.gold} more gold` : undefined}
+                  className={[
+                    'px-3 py-1.5 text-sm rounded border transition-colors flex flex-col items-start w-full',
+                    isSelected
+                      ? 'border-yellow-400 bg-yellow-900 text-yellow-200'
+                      : 'border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600',
+                    !canAfford ? 'opacity-50' : '',
+                  ].join(' ')}
+                >
+                  <span className="font-medium">{def.name}</span>
+                  <span className="text-xs opacity-70">{def.cost}g · [{idx + 1}]</span>
+                </button>
+              );
+            })}
+            {selectedDef && (
+              <span className="text-xs text-gray-500 mt-1">
+                Selected: {selectedDef.name} — dmg {selectedDef.damage}, range{' '}
+                {selectedDef.range}
+              </span>
+            )}
+          </div>
+
+          {/* Empty slot reserved for #88 (tower info panel) */}
+          <div className="min-h-32 border border-dashed border-slate-600 rounded-lg flex items-center justify-center" aria-label="Tower info panel — reserved for #88">
+            <span className="text-xs text-slate-600">Tower info</span>
+          </div>
+
+          {/* How to play — collapsible help */}
+          <HowToPlay towerCount={towerDefs.length} />
         </div>
 
-        {/* Wave counter */}
-        <div className="flex flex-col items-center min-w-[4rem]">
-          <span className="text-xs text-gray-500 uppercase tracking-wider">Wave</span>
-          <span className="text-2xl font-bold tabular-nums leading-tight">{waveDisplay}</span>
-        </div>
-
-        {/* Gold */}
-        <div className="flex flex-col items-center min-w-[4rem]">
-          <span className="text-xs text-yellow-600 uppercase tracking-wider">
-            {isCoopMode ? 'Shared Gold' : 'Gold'}
-          </span>
-          <span className="text-2xl font-bold tabular-nums text-yellow-400 leading-tight">
-            {state.gold}
-          </span>
-        </div>
-
-        {/* Base HP */}
-        <div className="flex flex-col items-center min-w-[4rem]">
-          <span className="text-xs text-red-600 uppercase tracking-wider">
-            {isCoopMode ? 'Shared Base HP' : 'Base HP'}
-          </span>
-          <span className="text-2xl font-bold tabular-nums text-red-400 leading-tight">
-            {state.baseHp}
-          </span>
-        </div>
-
-        {/* Controls */}
-        <div className="flex items-center gap-2 ml-auto flex-wrap">
+        {/* ── Bottom-right cluster ─────────────────────────────────────────── */}
+        <div className="absolute bottom-2 left-2 pointer-events-auto bg-slate-900/80 backdrop-blur-sm border border-slate-700 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap">
           <button
             className={[
               'px-3 py-1.5 text-sm rounded font-medium',
@@ -492,66 +561,8 @@ export function PlayPage() {
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Tower selector — affordability + key hint (AC1) */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm text-gray-400">Towers:</span>
-        {towerDefs.map((def, idx) => {
-          const canAfford = state.gold >= def.cost;
-          const isSelected = def.id === selectedTowerId;
-          return (
-            <button
-              key={def.id}
-              onClick={() => handleTowerSelect(def.id)}
-              aria-label={`${def.name} costs ${def.cost} gold`}
-              aria-disabled={!canAfford}
-              title={!canAfford ? `Need ${def.cost - state.gold} more gold` : undefined}
-              className={[
-                'px-3 py-1.5 text-sm rounded border transition-colors flex flex-col items-start',
-                isSelected
-                  ? 'border-yellow-400 bg-yellow-900 text-yellow-200'
-                  : 'border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600',
-                !canAfford ? 'opacity-50' : '',
-              ].join(' ')}
-            >
-              <span className="font-medium">{def.name}</span>
-              <span className="text-xs opacity-70">{def.cost}g · [{idx + 1}]</span>
-            </button>
-          );
-        })}
-        {selectedDef && (
-          <span className="text-xs text-gray-500 ml-2">
-            Selected: {selectedDef.name} — dmg {selectedDef.damage}, range{' '}
-            {selectedDef.range}
-          </span>
-        )}
       </div>
-
-      {/* Canvas + overlay */}
-      <div className="flex-1 min-h-0 relative">
-        {showEndScreen && (
-          <EndScreen
-            phase={state.phase as 'gameover' | 'victory'}
-            waveIndex={state.waveIndex}
-            onRestart={soloSession.restart}
-            signedIn={!isCoopMode && signedIn}
-            submitState={submitState}
-            submitError={submitError}
-            leaderboardHref="/leaderboard"
-            onSubmit={() => { void handleSubmitScore(); }}
-          />
-        )}
-        <GameCanvasThree
-          map={STARTER_MAP}
-          towers={state.towers}
-          enemies={state.enemies}
-          onCellClick={handleCellClick}
-        />
-      </div>
-
-      {/* How to play */}
-      <HowToPlay towerCount={towerDefs.length} />
-    </section>
+    </div>
   );
 }
