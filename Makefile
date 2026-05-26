@@ -1,6 +1,12 @@
-.PHONY: help install workspace fmt lint web-install web-fmt web-lint check dev dev-api dev-web kill-ports migrate-up migrate-down migrate-version migrate-create
+.PHONY: help install workspace fmt lint web-install web-fmt web-lint check dev dev-api dev-web kill-ports env db-up db-down migrate-up migrate-down migrate-version migrate-create
 
-DEV_PORTS ?= 5173 8080
+# Load .env so dev-api / migrate-up see DATABASE_URL, JWT_SECRET, etc.
+ifneq (,$(wildcard .env))
+include .env
+export
+endif
+
+DEV_PORTS ?= 5173 8080 5432
 
 MIGRATE_VERSION ?= v4.18.2
 
@@ -15,8 +21,11 @@ help:
 	@echo "Bastion Makefile targets:"
 	@echo ""
 	@echo "  install        Install golangci-lint v2, goimports, golines, and air (run once)"
-	@echo "  dev            Free dev ports, then run backend (air) and web (vite) together"
+	@echo "  dev            Bootstrap .env, free ports, start db, migrate, then run api (air) + web (vite)"
 	@echo "  kill-ports     Kill any processes listening on DEV_PORTS ($(DEV_PORTS))"
+	@echo "  env            Copy .env.example to .env if missing"
+	@echo "  db-up          docker compose up -d --wait db"
+	@echo "  db-down        docker compose stop db"
 	@echo "  dev-api        Run backend with air hot reload"
 	@echo "  dev-web        Run web dev server (vite)"
 	@echo "  workspace      Copy go.work.example to go.work if missing"
@@ -85,7 +94,21 @@ kill-ports:
 	@for p in $(DEV_PORTS); do pids=$$(lsof -ti tcp:$$p 2>/dev/null); if [ -n "$$pids" ]; then echo "Killing $$pids on port $$p"; kill -9 $$pids 2>/dev/null || true; fi; done
 endif
 
-dev: kill-ports
+ifeq ($(OS),Windows_NT)
+env:
+	@if not exist .env copy .env.example .env >NUL && echo "Created .env from .env.example"
+else
+env:
+	@test -f .env || (cp .env.example .env && echo "Created .env from .env.example")
+endif
+
+db-up:
+	docker compose up -d --wait db
+
+db-down:
+	docker compose stop db
+
+dev: env kill-ports db-up migrate-up
 	@$(MAKE) -j2 dev-api dev-web
 
 migrate-up:
