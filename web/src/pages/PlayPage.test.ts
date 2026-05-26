@@ -309,12 +309,12 @@ describe('#79 HUD shell — co-op banner in top bar (AC5)', () => {
 });
 
 describe('#79 HUD shell — right rail (AC2)', () => {
-  it('right rail panel has w-72 width class', () => {
+  it('right rail panel has w-64 or w-72 width class', () => {
     const rightRailStart = source.indexOf('Right rail');
     expect(rightRailStart).toBeGreaterThan(-1);
-    // w-72 or w-[280px] must appear within 300 chars of the marker
+    // w-64, w-72, or w-[280px] must appear within 300 chars of the marker
     const region = source.substring(rightRailStart, rightRailStart + 300);
-    expect(region).toMatch(/w-72|w-\[280px\]/);
+    expect(region).toMatch(/w-64|w-72|w-\[280px\]/);
   });
 
   it('tower-button .map iteration is inside the right-rail region', () => {

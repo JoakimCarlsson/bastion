@@ -403,43 +403,45 @@ export function PlayPage() {
       <div className="absolute inset-0 pointer-events-none">
 
         {/* ── HUD top bar ─────────────────────────────────────────────────── */}
-        <div className="absolute top-2 left-2 right-[296px] pointer-events-auto bg-slate-900/80 backdrop-blur-sm border border-slate-700 rounded-lg px-3 py-2 flex items-center gap-3 flex-wrap">
+        <div className="absolute top-2 left-2 pointer-events-auto inline-flex items-center gap-3 flex-wrap bg-slate-950/60 backdrop-blur-md ring-1 ring-white/5 rounded-lg px-2.5 py-1.5">
           {/* Phase pill */}
           <PhasePill phase={state.phase} />
 
           {/* Wave counter */}
-          <div className="flex flex-col items-center min-w-[4rem]">
+          <div className="flex flex-col items-center min-w-[3.5rem]">
             <span className="text-xs text-gray-500 uppercase tracking-wider">Wave</span>
-            <span className="text-2xl font-bold tabular-nums leading-tight">{waveDisplay}</span>
+            <span className="text-xl font-bold tabular-nums leading-tight">{waveDisplay}</span>
           </div>
 
           {/* Gold */}
-          <div className="flex flex-col items-center min-w-[4rem]">
+          <div className="flex flex-col items-center min-w-[3.5rem]">
             <span className="text-xs text-yellow-600 uppercase tracking-wider">
               {isCoopMode ? 'Shared Gold' : 'Gold'}
             </span>
-            <span className="text-2xl font-bold tabular-nums text-yellow-400 leading-tight">
+            <span className="text-xl font-bold tabular-nums text-yellow-400 leading-tight">
               {state.gold}
             </span>
           </div>
 
           {/* Base HP */}
-          <div className="flex flex-col items-center min-w-[4rem]">
+          <div className="flex flex-col items-center min-w-[3.5rem]">
             <span className="text-xs text-red-600 uppercase tracking-wider">
               {isCoopMode ? 'Shared Base HP' : 'Base HP'}
             </span>
-            <span className="text-2xl font-bold tabular-nums text-red-400 leading-tight">
+            <span className="text-xl font-bold tabular-nums text-red-400 leading-tight">
               {state.baseHp}
             </span>
           </div>
 
           {/* Co-op session banner — shown when ?lobby=<id> is in the URL */}
           {isCoopMode && (
-            <div className="flex items-center gap-2 flex-wrap ml-2">
-              <span className="font-medium text-blue-200 text-sm">Co-op session:</span>
-              <code className="text-blue-100 text-xs">{lobbyId}</code>
-              <span className={`text-xs ${sessionMirror.connected ? 'text-green-400' : 'text-yellow-400'}`}>
-                {sessionMirror.connected ? 'Live' : 'Connecting…'}
+            <div className="flex items-center gap-1.5 flex-wrap ml-1">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-900/60 ring-1 ring-blue-500/40 text-blue-200">
+                Co-op session:
+                <code className="text-blue-100">{lobbyId}</code>
+                <span className={sessionMirror.connected ? 'text-green-400' : 'text-yellow-400'}>
+                  {sessionMirror.connected ? '●' : '○'}
+                </span>
               </span>
               {/* Participant pills */}
               {lobbyPlayers.length > 0 && (
@@ -460,7 +462,7 @@ export function PlayPage() {
         </div>
 
         {/* ── Right rail (~280 px) ─────────────────────────────────────────── */}
-        <div className="absolute top-2 right-2 bottom-2 w-72 pointer-events-auto bg-slate-900/80 backdrop-blur-sm border border-slate-700 rounded-lg flex flex-col gap-2 p-3 overflow-y-auto">
+        <div className="absolute top-2 right-2 bottom-2 w-64 pointer-events-auto bg-gradient-to-l from-slate-950/70 to-slate-950/40 backdrop-blur-md border-l border-slate-700/50 rounded-lg flex flex-col gap-2 p-3 overflow-y-auto">
           {/* Tower picker — existing buttons rehomed here */}
           <div className="flex flex-col gap-2">
             <span className="text-sm text-gray-400 font-medium">Towers</span>
@@ -505,13 +507,13 @@ export function PlayPage() {
         </div>
 
         {/* ── Bottom-right cluster ─────────────────────────────────────────── */}
-        <div className="absolute bottom-2 left-2 pointer-events-auto bg-slate-900/80 backdrop-blur-sm border border-slate-700 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap">
+        <div className="absolute bottom-2 left-2 flex items-center gap-2 flex-wrap">
           <button
             className={[
-              'px-3 py-1.5 text-sm rounded font-medium',
+              'pointer-events-auto px-4 py-1.5 text-sm rounded-full font-medium shadow-lg backdrop-blur-md transition-colors',
               isStartWaveDisabled
-                ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-500 text-white',
+                ? 'bg-slate-800/70 text-slate-500 cursor-not-allowed ring-1 ring-white/5'
+                : 'bg-blue-600/80 hover:bg-blue-500/90 text-white ring-1 ring-blue-400/30',
             ].join(' ')}
             onClick={handleStartWave}
             disabled={isStartWaveDisabled}
@@ -522,7 +524,7 @@ export function PlayPage() {
           </button>
           {!isCoopMode && (
             <button
-              className="px-3 py-1.5 text-sm bg-gray-600 rounded hover:bg-gray-500"
+              className="pointer-events-auto px-4 py-1.5 text-sm rounded-full bg-slate-800/70 hover:bg-slate-700/80 text-slate-300 shadow-lg backdrop-blur-md ring-1 ring-white/5 transition-colors"
               onClick={soloSession.restart}
               aria-label="New game"
             >
@@ -531,7 +533,7 @@ export function PlayPage() {
           )}
 
           {/* Audio controls */}
-          <div className="flex items-center gap-2">
+          <div className="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950/60 backdrop-blur-md ring-1 ring-white/5 shadow-lg">
             <label htmlFor="volume-slider" className="text-xs text-gray-400 sr-only">
               Volume
             </label>
@@ -550,10 +552,10 @@ export function PlayPage() {
               aria-pressed={muted}
               onClick={handleMuteToggle}
               className={[
-                'px-2 py-1 text-xs rounded border transition-colors',
+                'px-2 py-1 text-xs rounded-full border transition-colors',
                 muted
-                  ? 'border-red-500 bg-red-900 text-red-200'
-                  : 'border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600',
+                  ? 'border-red-500 bg-red-900/60 text-red-200'
+                  : 'border-slate-600/50 bg-slate-800/60 text-gray-300 hover:bg-slate-700/70',
               ].join(' ')}
               title={muted ? 'Unmute' : 'Mute'}
             >
