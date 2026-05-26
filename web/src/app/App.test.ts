@@ -60,3 +60,35 @@ describe('App Shell — full-bleed /play layout (issue #77)', () => {
     expect(source).toContain('max-w-3xl');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #78 — slim /play top bar
+// ---------------------------------------------------------------------------
+
+describe('issue #78 — slim /play top bar', () => {
+  it('source contains PlayTopBar component definition', () => {
+    expect(source).toContain('PlayTopBar');
+  });
+
+  it('source contains Back to menu link text', () => {
+    expect(source).toContain('Back to menu');
+  });
+
+  it('source contains h-12 Tailwind class for slim top bar (≤56px)', () => {
+    expect(source).toContain('h-12');
+  });
+
+  it('source still contains full header classes (AC3 regression guard)', () => {
+    expect(source).toContain('mb-8 border-b border-slate-800 pb-4');
+    expect(source).toContain('max-w-3xl');
+  });
+
+  it('PlayTopBar JSX usage appears after the isPlay branch marker in source', () => {
+    const isPlayIdx = source.indexOf("isPlay = location.pathname === '/play'");
+    // Look for the JSX usage <PlayTopBar rather than the function definition
+    const playTopBarUsageIdx = source.indexOf('<PlayTopBar');
+    expect(isPlayIdx).toBeGreaterThan(-1);
+    expect(playTopBarUsageIdx).toBeGreaterThan(-1);
+    expect(playTopBarUsageIdx).toBeGreaterThan(isPlayIdx);
+  });
+});
