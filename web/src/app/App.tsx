@@ -53,6 +53,28 @@ function AuthNav() {
 }
 
 // ---------------------------------------------------------------------------
+// PlayTopBar — slim in-game top bar shown only on /play (≤56 px)
+// ---------------------------------------------------------------------------
+
+function PlayTopBar() {
+  return (
+    <header className="flex h-12 items-center justify-between border-b border-slate-800 bg-slate-950/80 px-4 backdrop-blur">
+      <div className="flex items-center gap-4">
+        <Link to="/" className="text-sm font-semibold tracking-tight text-slate-100 hover:text-white">
+          Bastion
+        </Link>
+        <Link to="/" className="text-sm text-slate-400 transition hover:text-slate-200">
+          ← Back to menu
+        </Link>
+      </div>
+      <nav className="flex items-center gap-2">
+        <AuthNav />
+      </nav>
+    </header>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Shell — layout wrapper; must run inside <BrowserRouter> to use useLocation
 // ---------------------------------------------------------------------------
 
@@ -96,7 +118,7 @@ function Shell() {
   if (isPlay) {
     return (
       <div className="flex h-[100dvh] w-screen flex-col overflow-hidden">
-        {header}
+        <PlayTopBar />
         <main className="min-h-0 flex-1">{routes}</main>
       </div>
     );
