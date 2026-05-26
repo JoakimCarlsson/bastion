@@ -4,14 +4,72 @@ import { STARTER_MAP, TOWER_DEFS, WAVES, useGameSession } from '../game';
 import { createAudioService, useGameAudio } from '../game/audio';
 import { GameCanvasThree } from '../game/render/GameCanvasThree';
 import { useSessionMirror } from '../game/useSessionMirror';
+import { getLobby } from '../lib/api/lobby';
+import type { LobbyPlayerDTO } from '../lib/api/lobby';
 import { submitScore } from '../lib/api/scores';
 import { useAuth } from '../lib/useAuth';
 import { getOrCreatePlayerId } from '../lib/playerIdentity';
+import { resolveHotkey, isTypingTarget } from './PlayPage.hotkeys';
 
 // ---------------------------------------------------------------------------
 // Module-level AudioService singleton (created once per module load; lazy ctx)
 // ---------------------------------------------------------------------------
 const audioService = createAudioService();
+
+// ---------------------------------------------------------------------------
+// Phase pill — colour/label varies per phase (AC2)
+// ---------------------------------------------------------------------------
+
+type GamePhase = 'prep' | 'combat' | 'gameover' | 'victory';
+
+const PHASE_CONFIG: Record<
+  GamePhase,
+  { label: string; className: string }
+> = {
+  prep: {
+    label: 'Prep — place towers',
+    className: 'bg-slate-700 text-slate-200 border border-slate-500',
+  },
+  combat: {
+    label: 'Wave in progress',
+    className: 'bg-amber-800 text-amber-100 border border-amber-600',
+  },
+  gameover: {
+    label: 'Game over',
+    className: 'bg-red-900 text-red-200 border border-red-600',
+  },
+  victory: {
+    label: 'Victory',
+    className: 'bg-green-900 text-green-200 border border-green-600',
+  },
+};
+
+function PhasePill({ phase }: { phase: string }) {
+  const config = PHASE_CONFIG[phase as GamePhase] ?? PHASE_CONFIG.prep;
+  return (
+    <span
+      role="status"
+      aria-live="polite"
+      className={`inline-block px-3 py-0.5 rounded-full text-xs font-semibold ${config.className}`}
+    >
+      {config.label}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stable slot→colour map for co-op participant pills
+// ---------------------------------------------------------------------------
+const SLOT_COLOURS = [
+  'bg-blue-800 text-blue-100 border-blue-600',
+  'bg-purple-800 text-purple-100 border-purple-600',
+  'bg-teal-800 text-teal-100 border-teal-600',
+  'bg-orange-800 text-orange-100 border-orange-600',
+];
+
+function slotColour(slot: number): string {
+  return SLOT_COLOURS[slot % SLOT_COLOURS.length];
+}
 
 // ---------------------------------------------------------------------------
 // EndScreen overlay — rendered over the canvas on 'gameover' or 'victory'
@@ -117,9 +175,9 @@ function EndScreen({
 }
 
 // ---------------------------------------------------------------------------
-// HowToPlay — collapsible help panel
+// HowToPlay — collapsible help panel with keyboard shortcuts
 // ---------------------------------------------------------------------------
-function HowToPlay() {
+function HowToPlay({ towerCount }: { towerCount: number }) {
   return (
     <details className="text-sm text-gray-400 border border-gray-700 rounded p-3 mt-1">
       <summary className="cursor-pointer font-medium text-gray-300 select-none">
@@ -141,6 +199,19 @@ function HowToPlay() {
         <li>
           Enemies that reach the end damage your <strong>Base HP</strong>. Reach
           0 and it&apos;s game over.
+        </li>
+      </ul>
+      <p className="mt-3 font-medium text-gray-300">Keyboard shortcuts</p>
+      <ul className="mt-1 list-disc list-inside space-y-1">
+        {Array.from({ length: towerCount }, (_, i) => (
+          <li key={i}>
+            <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs font-mono">{i + 1}</kbd>{' '}
+            — select tower {i + 1}
+          </li>
+        ))}
+        <li>
+          <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs font-mono">Space</kbd>{' '}
+          — start wave (during prep phase)
         </li>
       </ul>
     </details>
@@ -177,6 +248,9 @@ export function PlayPage() {
   const [submitState, setSubmitState] = useState<SubmitState>('idle');
   const [submitError, setSubmitError] = useState<string>('');
 
+  // Co-op participant list — fetched once on mount when isCoopMode
+  const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayerDTO[]>([]);
+
   // Track run start time: when phase moves to 'combat', record timestamp
   useEffect(() => {
     if (state.phase === 'combat' && runStartRef.current === null) {
@@ -190,6 +264,22 @@ export function PlayPage() {
     }
   }, [state.phase]);
 
+  // Fetch lobby players once on mount in co-op mode (cancelled flag per LEARNINGS #73)
+  useEffect(() => {
+    if (!isCoopMode || !lobbyId) return;
+    let cancelled = false;
+    getLobby(lobbyId)
+      .then((lobby) => {
+        if (!cancelled) setLobbyPlayers(lobby.players);
+      })
+      .catch(() => {
+        // Lobby may be closed/unavailable once status=in_game — tolerate silently
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCoopMode, lobbyId]);
+
   // Audio volume UI state — initialised from the service (which reads localStorage)
   const [volume, setVolume] = useState<number>(() => Math.round(audioService.getMasterVolume() * 100));
   const [muted, setMuted] = useState<boolean>(() => audioService.getMuted());
@@ -198,6 +288,7 @@ export function PlayPage() {
   const { onUserGesture, onTowerPlaced, onWaveStart } = useGameAudio(state, audioService);
 
   const towerDefs = Object.values(TOWER_DEFS);
+  const towerIds = towerDefs.map((d) => d.id);
   const selectedDef = TOWER_DEFS[selectedTowerId];
 
   const isStartWaveDisabled =
@@ -265,105 +356,167 @@ export function PlayPage() {
     }
   }
 
+  // Window-level keyboard shortcut handler
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (isTypingTarget(document.activeElement)) return;
+      const action = resolveHotkey(e.key, towerIds);
+      if (!action) return;
+      if (action.kind === 'tower') {
+        e.preventDefault();
+        handleTowerSelect(action.id);
+      } else if (action.kind === 'start-wave' && !isStartWaveDisabled) {
+        e.preventDefault();
+        handleStartWave();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [towerIds, isStartWaveDisabled]);
+
   return (
     <section className="flex flex-col gap-3" style={{ height: 'calc(100vh - 8rem)' }}>
       {/* Co-op session banner — shown when ?lobby=<id> is in the URL */}
       {isCoopMode && (
-        <div className="rounded bg-blue-900 border border-blue-700 px-4 py-2 text-sm text-blue-200 flex items-center gap-2">
+        <div className="rounded bg-blue-900 border border-blue-700 px-4 py-2 text-sm text-blue-200 flex items-center gap-2 flex-wrap">
           <span className="font-medium">Co-op session:</span>
           <code className="text-blue-100 text-xs">{lobbyId}</code>
-          <span className={`text-xs ml-auto ${sessionMirror.connected ? 'text-green-400' : 'text-yellow-400'}`}>
+          <span className={`text-xs ${sessionMirror.connected ? 'text-green-400' : 'text-yellow-400'}`}>
             {sessionMirror.connected ? 'Live' : 'Connecting…'}
           </span>
+          {/* Participant pills — AC1 */}
+          {lobbyPlayers.length > 0 && (
+            <div className="flex items-center gap-1 ml-auto flex-wrap" aria-label="Co-op participants">
+              {lobbyPlayers.map((p) => (
+                <span
+                  key={p.player_id}
+                  className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${slotColour(p.slot)}`}
+                  title={`Slot ${p.slot + 1}`}
+                >
+                  {p.display_name}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
-      {/* HUD */}
-      <div className="flex items-center gap-6 flex-wrap">
-        <h2 className="text-xl font-semibold">Play</h2>
-        <span className="text-sm text-gray-400">
-          Wave: <strong>{waveDisplay}</strong>
-        </span>
-        <span className="text-sm text-yellow-400">
-          {isCoopMode ? 'Shared Gold' : 'Gold'}: <strong>{state.gold}</strong>
-        </span>
-        <span className="text-sm text-red-400">
-          {isCoopMode ? 'Shared Base HP' : 'Base HP'}: <strong>{state.baseHp}</strong>
-        </span>
-        <span className="text-sm text-gray-400">
-          Phase: <strong>{state.phase}</strong>
-        </span>
-        <button
-          className={[
-            'px-3 py-1 text-sm rounded',
-            isStartWaveDisabled
-              ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-500 text-white',
-          ].join(' ')}
-          onClick={handleStartWave}
-          disabled={isStartWaveDisabled}
-        >
-          Start wave
-        </button>
-        {!isCoopMode && (
-          <button
-            className="px-3 py-1 text-sm bg-gray-600 rounded hover:bg-gray-500"
-            onClick={soloSession.restart}
-          >
-            New game
-          </button>
-        )}
 
-        {/* Audio controls */}
-        <div className="flex items-center gap-2 ml-auto">
-          <label htmlFor="volume-slider" className="text-xs text-gray-400 sr-only">
-            Volume
-          </label>
-          <input
-            id="volume-slider"
-            type="range"
-            min={0}
-            max={100}
-            value={volume}
-            onChange={handleVolumeChange}
-            className="w-20 accent-blue-500 cursor-pointer"
-            aria-label="Master volume"
-          />
-          <span className="text-xs text-gray-400 w-8 text-right">{volume}%</span>
+      {/* HUD — typographic hierarchy (AC1) */}
+      <div className="flex items-start gap-4 flex-wrap">
+        {/* Phase pill */}
+        <div className="flex flex-col gap-1">
+          <PhasePill phase={state.phase} />
+        </div>
+
+        {/* Wave counter */}
+        <div className="flex flex-col items-center min-w-[4rem]">
+          <span className="text-xs text-gray-500 uppercase tracking-wider">Wave</span>
+          <span className="text-2xl font-bold tabular-nums leading-tight">{waveDisplay}</span>
+        </div>
+
+        {/* Gold */}
+        <div className="flex flex-col items-center min-w-[4rem]">
+          <span className="text-xs text-yellow-600 uppercase tracking-wider">
+            {isCoopMode ? 'Shared Gold' : 'Gold'}
+          </span>
+          <span className="text-2xl font-bold tabular-nums text-yellow-400 leading-tight">
+            {state.gold}
+          </span>
+        </div>
+
+        {/* Base HP */}
+        <div className="flex flex-col items-center min-w-[4rem]">
+          <span className="text-xs text-red-600 uppercase tracking-wider">
+            {isCoopMode ? 'Shared Base HP' : 'Base HP'}
+          </span>
+          <span className="text-2xl font-bold tabular-nums text-red-400 leading-tight">
+            {state.baseHp}
+          </span>
+        </div>
+
+        {/* Controls */}
+        <div className="flex items-center gap-2 ml-auto flex-wrap">
           <button
-            aria-pressed={muted}
-            onClick={handleMuteToggle}
             className={[
-              'px-2 py-1 text-xs rounded border transition-colors',
-              muted
-                ? 'border-red-500 bg-red-900 text-red-200'
-                : 'border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600',
+              'px-3 py-1.5 text-sm rounded font-medium',
+              isStartWaveDisabled
+                ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-500 text-white',
             ].join(' ')}
-            title={muted ? 'Unmute' : 'Mute'}
+            onClick={handleStartWave}
+            disabled={isStartWaveDisabled}
+            aria-label="Start wave"
+            aria-keyshortcuts="Space"
           >
-            {muted ? 'Muted' : 'Sound'}
+            Start wave
           </button>
+          {!isCoopMode && (
+            <button
+              className="px-3 py-1.5 text-sm bg-gray-600 rounded hover:bg-gray-500"
+              onClick={soloSession.restart}
+              aria-label="New game"
+            >
+              New game
+            </button>
+          )}
+
+          {/* Audio controls */}
+          <div className="flex items-center gap-2">
+            <label htmlFor="volume-slider" className="text-xs text-gray-400 sr-only">
+              Volume
+            </label>
+            <input
+              id="volume-slider"
+              type="range"
+              min={0}
+              max={100}
+              value={volume}
+              onChange={handleVolumeChange}
+              className="w-20 accent-blue-500 cursor-pointer"
+              aria-label="Master volume"
+            />
+            <span className="text-xs text-gray-400 w-8 text-right">{volume}%</span>
+            <button
+              aria-pressed={muted}
+              onClick={handleMuteToggle}
+              className={[
+                'px-2 py-1 text-xs rounded border transition-colors',
+                muted
+                  ? 'border-red-500 bg-red-900 text-red-200'
+                  : 'border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600',
+              ].join(' ')}
+              title={muted ? 'Unmute' : 'Mute'}
+            >
+              {muted ? 'Muted' : 'Sound'}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Tower selector */}
+      {/* Tower selector — affordability + key hint (AC1) */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm text-gray-400">Towers:</span>
-        {towerDefs.map((def) => {
+        {towerDefs.map((def, idx) => {
           const canAfford = state.gold >= def.cost;
           const isSelected = def.id === selectedTowerId;
           return (
             <button
               key={def.id}
               onClick={() => handleTowerSelect(def.id)}
+              aria-label={`${def.name} costs ${def.cost} gold`}
+              aria-disabled={!canAfford}
+              title={!canAfford ? `Need ${def.cost - state.gold} more gold` : undefined}
               className={[
-                'px-3 py-1 text-sm rounded border transition-colors',
+                'px-3 py-1.5 text-sm rounded border transition-colors flex flex-col items-start',
                 isSelected
                   ? 'border-yellow-400 bg-yellow-900 text-yellow-200'
                   : 'border-gray-600 bg-gray-700 text-gray-300 hover:bg-gray-600',
                 !canAfford ? 'opacity-50' : '',
               ].join(' ')}
             >
-              {def.name} ({def.cost}g)
+              <span className="font-medium">{def.name}</span>
+              <span className="text-xs opacity-70">{def.cost}g · [{idx + 1}]</span>
             </button>
           );
         })}
@@ -398,7 +551,7 @@ export function PlayPage() {
       </div>
 
       {/* How to play */}
-      <HowToPlay />
+      <HowToPlay towerCount={towerDefs.length} />
     </section>
   );
 }

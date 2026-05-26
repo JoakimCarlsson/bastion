@@ -1,7 +1,7 @@
 /**
  * PlayPage source-read test — verifies the conditional branch that switches
  * from useGameSession (solo) to useSessionMirror (co-op) when ?lobby= is set.
- * Also verifies score submission UI (AC2/AC3) and auth integration.
+ * Also verifies score submission UI and auth integration.
  *
  * Pattern: pure source-read assertion (#67). No DOM rendering required.
  */
@@ -109,5 +109,86 @@ describe('PlayPage score submission source-read assertions', () => {
   it('tracks run start timestamp via useRef', () => {
     expect(source).toContain('runStartRef');
     expect(source).toContain('useRef');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC1 — phase-aware pill and co-op participant pills (HUD readability)
+// ---------------------------------------------------------------------------
+
+describe('PlayPage phase pill and co-op participant pills (AC1)', () => {
+  it('renders distinct label for prep phase', () => {
+    expect(source).toContain("'prep'");
+    expect(source).toContain('Prep — place towers');
+  });
+
+  it('renders distinct label for combat phase', () => {
+    expect(source).toContain("'combat'");
+    expect(source).toContain('Wave in progress');
+  });
+
+  it('renders distinct label for gameover phase', () => {
+    expect(source).toContain("'gameover'");
+    expect(source).toContain('Game over');
+  });
+
+  it('renders distinct label for victory phase', () => {
+    expect(source).toContain("'victory'");
+    expect(source).toContain('Victory');
+  });
+
+  it('phase pill has role="status" and aria-live="polite"', () => {
+    expect(source).toContain('role="status"');
+    expect(source).toContain('aria-live="polite"');
+  });
+
+  it('imports getLobby from ../lib/api/lobby', () => {
+    expect(source).toContain("from '../lib/api/lobby'");
+    expect(source).toContain('getLobby');
+  });
+
+  it('participant pills render is gated by isCoopMode', () => {
+    // The getLobby call must be guarded by isCoopMode
+    const getLobbyIdx = source.indexOf('getLobby(lobbyId)');
+    expect(getLobbyIdx).toBeGreaterThan(-1);
+    const prior = source.substring(0, getLobbyIdx);
+    expect(prior).toContain('isCoopMode');
+  });
+
+  it('lobby fetch effect uses a cancelled flag (LEARNINGS #73)', () => {
+    expect(source).toContain('let cancelled = false');
+    expect(source).toContain('cancelled = true');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC2 — keyboard shortcut handler wired via useEffect
+// ---------------------------------------------------------------------------
+
+describe('PlayPage keyboard shortcut wiring (AC2)', () => {
+  it('imports resolveHotkey from PlayPage.hotkeys', () => {
+    expect(source).toContain("from './PlayPage.hotkeys'");
+    expect(source).toContain('resolveHotkey');
+  });
+
+  it('imports isTypingTarget from PlayPage.hotkeys', () => {
+    expect(source).toContain('isTypingTarget');
+  });
+
+  it('adds a window keydown listener via useEffect', () => {
+    expect(source).toContain("window.addEventListener('keydown'");
+    expect(source).toContain("window.removeEventListener('keydown'");
+  });
+
+  it('keydown handler checks isTypingTarget before acting', () => {
+    const handlerStart = source.indexOf("window.addEventListener('keydown'");
+    expect(handlerStart).toBeGreaterThan(-1);
+    // isTypingTarget check must appear before the addEventListener call
+    const priorSource = source.substring(0, handlerStart);
+    expect(priorSource).toContain('isTypingTarget');
+  });
+
+  it('Start wave button has aria-keyshortcuts="Space"', () => {
+    expect(source).toContain('aria-keyshortcuts="Space"');
   });
 });
