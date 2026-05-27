@@ -1,54 +1,14 @@
 # Bastion conventions (all delivery agents)
 
-Read repo-root **`AGENTS.md` first**, then `docs/backend-architecture.md`, then **`docs/pipeline-handoff-schema.md`** (canonical HANDOFF contract — every agent in the chain conforms to it), before planning or implementing.
+This repo is an **agent pipeline scaffold** — three homes (`.claude/agents/`, `.cursor/agents/`, `.github/agents/`) carrying the same planner → red-team → coder → smoke-tester → reviewer chain. There is no application code in this tree; the agents are intended to be copied or referenced into other projects.
 
 ## Pipeline shape
 
-The full chain is **planner → red-team → coder → smoke-tester → reviewer**. The red-team agent walks every `assumptions[]` entry in the plan; on `RED-TEAM:REFUTED` the plan goes back to the user (ambiguity gate), not to the coder. Cursor uses `handoffs:` frontmatter to fire each next stage automatically.
+The full chain is **planner → red-team → coder → smoke-tester → reviewer**. The red-team agent walks every `assumptions[]` entry in the plan; on `RED-TEAM:REFUTED` the plan goes back to the user (ambiguity gate), not to the coder. Cursor uses `handoffs:` frontmatter to fire each next stage automatically. The canonical HANDOFF block shapes live in `.claude/commands/pipeline.md` under "HANDOFF schema".
 
 ## Verification — mandatory E2E
 
-1. **Everything observable must be verified end-to-end.** Unit tests alone are not enough for HTTP APIs or running services.
-2. **New or changed API routes:** start the API (`go run ./cmd/api`, `docker compose up`, or `commands_to_verify.serve`), then **`curl` every new/changed endpoint** — record status and body; compare to acceptance criteria.
-3. **Smoke-tester** must not mark pass without live endpoint evidence when the issue touches HTTP.
-4. **Coder** must list every new/changed route in `HANDOFF:IMPLEMENTATION` → `smoke_endpoints` with concrete `expect` values.
-5. Use `.cursor/verify-commands.md` for project-specific commands.
-
-## Architecture (Go)
-
-Package **by subsystem (bounded context)**, not by layer. Top-level dirs under `internal/` are domain slices. Flat packages with many `.go` files; sub-folders only when a sub-feature has its own vocabulary and ~10+ files.
-
-**Forbidden:**
-
-```
-internal/
-  controllers/
-  services/
-  repositories/
-  models/
-```
-
-**Layout:**
-
-```
-bastion/
-  cmd/api/main.go
-  deps/minmux/              # git submodule
-  migrations/
-  docs/backend-architecture.md
-  internal/
-    health/                 # pure domain
-    http/                   # minmux routes, static SPA
-    store/                  # DB pool + migrate
-  web/                      # Bun + React SPA — all frontend here
-```
-
-| Rule | Detail |
-|------|--------|
-| Domain purity | `internal/<subsystem>/` — no `net/http`, no HTTP request DTOs |
-| HTTP | `internal/http/*_endpoint.go` per subsystem; minmux routes |
-| SQL | `internal/<subsystem>/store.go` — not `internal/repositories/` |
-| Shared DB | `internal/store/` — pool + migrate only |
-| `main.go` | Wiring only — env, pool, `http.NewHandler`, listen |
-
-When adding a subsystem: domain package → optional `store.go` → `http/<name>_endpoint.go` → wire in `NewHandler`. Mirror `internal/health` + `health_endpoint.go`.
+1. **Everything observable must be verified end-to-end.** Unit tests alone are not enough for running services.
+2. **New or changed routes/endpoints:** start the service, then exercise every new/changed surface (curl, browser, CLI as appropriate) — record output; compare to acceptance criteria.
+3. **Smoke-tester** must not mark pass without live evidence when the issue touches a network surface.
+4. **Coder** must list every new/changed surface in `HANDOFF:IMPLEMENTATION` → `smoke_endpoints` with concrete `expect` values.

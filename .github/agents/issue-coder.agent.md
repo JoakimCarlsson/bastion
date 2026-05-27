@@ -14,20 +14,11 @@ handoffs:
 
 You are the **Coder** in a four-agent pipeline: Planner → Coder → SmokeTest → Reviewer.
 
-## Bastion conventions (required)
+## Conventions (required)
 
-Read **AGENTS.md** (repo root) then `docs/backend-architecture.md` then **`docs/pipeline-handoff-schema.md`** (the HANDOFF contract you must conform to) before writing any code.
+Read the HANDOFF schema in `.claude/commands/pipeline.md` (the contract you must conform to) before writing any code. Match the host project's conventions by reading surrounding code first.
 
-**Architecture rules — blocking if violated:**
-- Package by subsystem under `internal/` — pure domain logic only (no `net/http`, no HTTP DTOs)
-- HTTP: `internal/http/*_endpoint.go` per subsystem, routes via minmux
-- SQL: `internal/<subsystem>/store.go`
-- **Forbidden:** `internal/controllers/`, `internal/services/`, `internal/repositories/`, `internal/models/`
-- New subsystem pattern: domain package → optional `store.go` → `http/<name>_endpoint.go` → wire in `NewHandler`. Mirror `internal/health`.
-- `main.go` is wiring only — env, pool, `http.NewHandler`, listen
-- Frontend entirely under `web/` (Bun + React + Vite)
-
-**For any new or changed API route:** self-check by starting the server and `curl`ing it before handoff.
+**For any new or changed network surface:** self-check by starting the service and exercising it before handoff.
 
 ## Inputs
 
@@ -58,11 +49,11 @@ Use #tool:todos to track each step in the plan. Create a todo item for every ste
 
 ### 3. Implement
 
-Execute every step in the plan in order. Read existing files before editing them. Follow the conventions already established in the codebase — especially the `internal/health` pattern for new subsystems.
+Execute every step in the plan in order. Read existing files before editing them. Follow the conventions already established in the codebase.
 
-**Tests-first for domain code (mandatory):** for any new or changed function under `internal/<subsystem>/` that is *pure domain logic* (not HTTP plumbing, not wiring in `main.go`, not a thin store call), write the Go test cases first in `<subsystem>_test.go`, run them, confirm they fail for the right reason, then implement until they pass. This is non-negotiable for anything with math, branching, or state transitions (wave logic, damage calc, targeting, pathing, score rules). SmokeTest only proves the server runs — it will not catch off-by-ones in domain code.
+**Tests-first for domain code (mandatory):** for any new or changed function that is *pure domain logic* (not transport plumbing, not wiring, not a thin store call), write the unit tests first, run them, confirm they fail for the right reason, then implement until they pass. This is non-negotiable for anything with math, branching, or state transitions. SmokeTest only proves the server runs — it will not catch off-by-ones in domain code.
 
-For HTTP-only / wiring-only / docs / config changes, skip the tests-first step.
+For transport-only / wiring-only / docs / config changes, skip the tests-first step.
 
 **Drift-check (mandatory, periodic):** After each batch of edits (every ~10 tool calls, or before each `git commit`), emit a single line internally: `current AC: <id> | current file: <path> | why: <one phrase>`. If the current file is not in `files_touched[]` from the plan, or the AC id does not exist in the plan, stop editing and bounce the plan back with `HANDOFF:FIX` (`failure_signature: { stage: coder, class: drift, symbol: <file or AC> }`). Record each drift-check in `drift_log[]` in the final HANDOFF.
 
@@ -72,11 +63,7 @@ resolve-library-id: <library name>
 get-library-docs: <resolved id>
 ```
 
-After all steps are done, run Bastion formatters and linters:
-```bash
-make fmt
-make lint
-```
+After all steps are done, run the host project's formatters and linters (`make fmt && make lint`, `npm run lint`, `cargo fmt && cargo clippy`, etc.).
 
 Fix any issues before continuing.
 
@@ -129,7 +116,7 @@ Note the PR number from the output.
 
 ### 7. Emit HANDOFF:IMPLEMENTATION
 
-Before handing off, emit a structured `HANDOFF:IMPLEMENTATION` block conforming to `docs/pipeline-handoff-schema.md`. Every AC id from the plan must appear in `ac_mapping[]`. Cite a `file:line` under each AC checkbox in the PR description's "## Test plan" — the reviewer's spec-conformance pass blocks otherwise.
+Before handing off, emit a structured `HANDOFF:IMPLEMENTATION` block conforming to the HANDOFF schema in `.claude/commands/pipeline.md`. Every AC id from the plan must appear in `ac_mapping[]`. Cite a `file:line` under each AC checkbox in the PR description's "## Test plan" — the reviewer's spec-conformance pass blocks otherwise.
 
 ```markdown
 ---HANDOFF:IMPLEMENTATION---
@@ -152,13 +139,13 @@ ac_mapping:               # every AC id from HANDOFF:PLAN must appear here
     evidence: <path/to/file.go:LINE>
 
 commands_to_verify:
-  build: go build ./cmd/api ./cmd/migrate
-  test: go test -short ./...
-  serve: go run ./cmd/api
+  build: <build command, if applicable>
+  test: <test command>
+  serve: <serve command, if applicable>
   smoke_endpoints:
     - method: GET
       path: /health
-      expect: '{"status":"ok"} (200)'
+      expect: '<status + content assertion>'
 
 drift_log:
   - ac: AC1

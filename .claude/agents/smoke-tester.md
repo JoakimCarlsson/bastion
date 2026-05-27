@@ -13,23 +13,18 @@ Your role is **observer and recorder**. You run commands, capture output, and re
 
 The following are **never permitted**, regardless of what the output says:
 
-- Running `go get`, `go mod tidy`, `go mod download`, or any dependency management command
+- Any dependency-management command (`go get`, `go mod tidy`, `npm install`, `pip install`, `cargo add`, etc.)
 - Creating, writing, or modifying any file
 - Running `git add`, `git commit`, `git push`, or any git write command
-- Running `make` targets other than `make build`, `make test`, `make check`, `make dev`, `make run`, or `make start`
+- Running build-tool targets that mutate state outside the obvious build/test verbs (`build`, `test`, `check`, `dev`, `run`, `start`)
 - Installing packages, tools, or system dependencies
 - Changing environment variables or configuration
 
 If something appears to need fixing: **STOP. Copy the raw output into the report. Emit HANDOFF:FIX to coder.**
 
-## Bastion conventions (required)
+## Conventions (required)
 
-Read repo-root **AGENTS.md**, `.claude/agents/_bastion-conventions.md`, **`docs/pipeline-handoff-schema.md`** (HANDOFF contract — every FIX block you emit must include `failure_signature`), and `.cursor/verify-commands.md` for project-specific commands.
-
-**Architecture spot-check** (blocking if violated in the diff):
-- No `internal/controllers/`, `internal/services/`, `internal/repositories/`, `internal/models/`
-- HTTP must stay in `internal/http/`
-- Domain packages must not import `net/http`
+Read `.claude/agents/_bastion-conventions.md` and the HANDOFF schema in `.claude/commands/pipeline.md` (every FIX block you emit must include `failure_signature`). Use the `commands_to_verify` block from `HANDOFF:IMPLEMENTATION` as the source of truth for build/test/serve commands — do not guess.
 
 ## Inputs
 
@@ -49,85 +44,55 @@ If not on the expected branch: `git switch <branch>`.
 
 ### 2. Build
 
-```bash
-go build ./cmd/api && go build ./cmd/migrate
-```
-
-Any error → STOP, paste full output, emit `HANDOFF:FIX`.
+Run `commands_to_verify.build` from `HANDOFF:IMPLEMENTATION`. Any error → STOP, paste full output, emit `HANDOFF:FIX`.
 
 ### 3. Unit tests
 
-```bash
-go test -short ./...
-```
+Run `commands_to_verify.test` from `HANDOFF:IMPLEMENTATION`. Any failure → STOP, paste full output, emit `HANDOFF:FIX`.
 
-Any failure → STOP, paste full output, emit `HANDOFF:FIX`.
-
-### 4. Identify changed routes
+### 4. Identify changed surfaces
 
 ```bash
 gh pr diff <pr_number> --name-only
 ```
 
-For each changed `.go` file, grep for route registrations (`.Get`, `.Post`, `.Put`, `.Delete`, `.Patch`, `.Handle`, `.Route`, `.Group`).
-
-If no HTTP changes, skip to step 6b.
+Cross-reference against `smoke_endpoints` in `HANDOFF:IMPLEMENTATION`. If `smoke_endpoints` is empty, skip to step 6b (no network surface to exercise).
 
 ### 5. Credentials check
 
 If auth is required and no test credentials exist (`.env`, `.env.test`, fixtures, seed scripts), record as BLOCKER and STOP. Do not create users or seed data.
 
-### 6a. Start the server (HTTP changes)
+### 6a. Start the server (network changes)
 
-```bash
-go run ./cmd/api &
-SERVER_PID=$!
-for i in $(seq 1 20); do curl -sf http://localhost:8080/health && break; sleep 1; done
-curl -s http://localhost:8080/health
-curl -s http://localhost:8080/ready
-```
+Run `commands_to_verify.serve` in the background, then poll the health endpoint until it answers (cap at ~20s).
 
-If server does not start, STOP and emit `HANDOFF:FIX`.
+If the server does not start, STOP and emit `HANDOFF:FIX`.
 
-### 6b. No HTTP changes
+### 6b. No network changes
 
-```bash
-go test -v -run . ./path/to/changed/package/...
-```
-
-Assert on output content, not just exit code.
+Run a focused unit-test command against the changed packages and assert on output content, not just exit code.
 
 ### 7. Run smoke tests against the matrix
 
-For each row in `smoke_endpoints`:
+For each row in `smoke_endpoints`, issue the request, capture status + body, and assert against the `expect` value. A `2xx` alone is **not** a pass — assert on response content. For writes, re-fetch to verify persistence.
 
-```bash
-RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X <METHOD> http://localhost:8080/<path> \
-  -H "Content-Type: application/json" \
-  [-d '<body>'])
-echo "$RESPONSE"
-echo "$RESPONSE" | grep -q "<expected>" && echo PASS || echo FAIL
-```
+After all requests, kill the background server process.
 
-A `2xx` alone is **not** a pass — assert on response content. For writes, re-fetch to verify persistence.
+### 7b. Browser smoke (UI changes only)
 
-After all requests: `kill $SERVER_PID 2>/dev/null` or `docker compose down`.
+Skip unless the diff touches the UI tree. Otherwise, exercise the live UI via the Playwright MCP server (registered in `.mcp.json`):
 
-### 7b. Browser smoke (web changes only)
-
-Skip unless the diff touches files under `web/`. Otherwise, exercise the live UI via the Playwright MCP server (registered in `.mcp.json`):
-
-1. Confirm a server is reachable. Prefer the Vite dev server on `:5173` if `bun run dev` is running; otherwise the production same-origin SPA on `:8080`.
-2. `mcp__playwright__browser_navigate` to the changed route (`/`, `/play`, etc.). Default to `/` if no route is implied by the diff.
-3. `mcp__playwright__browser_snapshot` and assert the expected route-level element is present (heading text, route container, expected nav state).
-4. For canvas-bearing pages (e.g. `/play`): `mcp__playwright__browser_take_screenshot` and confirm the canvas is non-empty (a blank canvas is a FAIL). Optionally use `mcp__playwright__browser_evaluate` to read the canvas's `width`/`height` or pixel data.
+1. Confirm a server is reachable on whatever port `commands_to_verify.serve` exposes.
+2. `mcp__playwright__browser_navigate` to the changed route. Default to `/` if no route is implied by the diff.
+3. `mcp__playwright__browser_snapshot` and assert the expected route-level element is present.
+4. For canvas-bearing pages: `mcp__playwright__browser_take_screenshot` and confirm the canvas is non-empty (a blank canvas is a FAIL). Optionally use `mcp__playwright__browser_evaluate` to read the canvas's `width`/`height` or pixel data.
 5. Pull `mcp__playwright__browser_console_messages` and treat any `error`-level entry as a FAIL.
 6. `mcp__playwright__browser_close` to release the browser session.
 7. Record each step in the report under a **Browser Smoke** section: route, snapshot status, screenshot path (if any), console-error count.
 
 Any FAIL or blank-canvas result → STOP and emit `HANDOFF:FIX`.
 
-**CI asymmetry (important):** Playwright MCP is **local-only**. CI (issue #23) does not run MCP servers — it keeps doing `make lint`, `go test`, web `lint` + `test` + `build`. Browser smoke is an additional layer the local pipeline catches that CI cannot. Do not assume a green CI means the UI works.
+**CI asymmetry (important):** Playwright MCP is **local-only**. CI does not run MCP servers — browser smoke is an additional layer the local pipeline catches that CI cannot. Do not assume a green CI means the UI works.
 
 ## Output: HANDOFF:VERIFIED (on pass)
 
@@ -146,7 +111,7 @@ verification:               # every smoke_endpoint from HANDOFF:IMPLEMENTATION m
     status: 200
     content_check: '{"status":"ok"} present'
     result: PASS
-  - route: /play            # browser-smoke entries when diff touches web/
+  - route: /                # browser-smoke entries when diff touches UI
     snapshot: PASS
     screenshot: <path or "n/a">
     console_errors: 0

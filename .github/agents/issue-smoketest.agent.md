@@ -23,23 +23,18 @@ Your role is **observer and recorder**. You run commands, capture their output, 
 
 The following are **never permitted**, regardless of what the output says:
 
-- Running `go get`, `go mod tidy`, `go mod download`, or any dependency management command
+- Any dependency-management command (`go get`, `go mod tidy`, `npm install`, `pip install`, `cargo add`, etc.)
 - Creating, writing, or modifying any file via any method
 - Running `git add`, `git commit`, `git push`, or any git write command
-- Running `make` targets other than `make build`, `make test`, `make check`, `make dev`, `make run`, or `make start`
+- Running build-tool targets that mutate state outside the obvious build/test verbs
 - Installing packages, tools, or system dependencies
 - Changing environment variables or configuration
 
 If something appears to need fixing: **STOP. Copy the raw output into the report. Select Tests failed — hand off to Coder.**
 
-## Bastion conventions (required)
+## Conventions (required)
 
-Read **AGENTS.md** (repo root), **`docs/pipeline-handoff-schema.md`** (HANDOFF contract — every FIX block you emit must include `failure_signature`), and `.cursor/verify-commands.md` for project-specific commands.
-
-**Architecture spot-check** (blocking if violated in the diff):
-- No `internal/controllers/`, `internal/services/`, `internal/repositories/`, `internal/models/`
-- HTTP must stay in `internal/http/`
-- Domain packages must not import `net/http`
+Read the HANDOFF schema in `.claude/commands/pipeline.md` (every FIX block you emit must include `failure_signature`). Use the `commands_to_verify` block from `HANDOFF:IMPLEMENTATION` as the source of truth for build/test/serve commands — do not guess.
 
 ## Inputs
 
@@ -62,40 +57,25 @@ If not on the correct branch: `git checkout <branch>`
 
 ### 2. Build
 
-```bash
-go build ./cmd/api
-go build ./cmd/migrate
-```
-
-Any error → **STOP. Paste full output. Select Tests failed.**
+Run `commands_to_verify.build` from `HANDOFF:IMPLEMENTATION`. Any error → **STOP. Paste full output. Select Tests failed.**
 
 ### 3. Unit tests
 
-```bash
-go test -short ./...
-```
+Run `commands_to_verify.test` from `HANDOFF:IMPLEMENTATION`. Any failure or non-zero exit → **STOP. Paste full output. Select Tests failed.**
 
-Any failure or non-zero exit → **STOP. Paste full output. Select Tests failed.**
-
-### 4. Identify changed routes
+### 4. Identify changed surfaces
 
 ```bash
 gh pr diff <pr_number> --name-only
 ```
 
-For each changed `.go` file, search for route registrations:
-
-```bash
-grep -n "\.Get\|\.Post\|\.Put\|\.Delete\|\.Patch\|\.Handle\|\.Route\|\.Group" <file>
-```
-
-If the project has **no HTTP changes**, skip to step 6b.
+Cross-reference against `smoke_endpoints` in `HANDOFF:IMPLEMENTATION`. If `smoke_endpoints` is empty, skip to step 6b.
 
 Build a test matrix covering:
-- Every new or modified endpoint
-- At least one happy-path request per endpoint
+- Every new or modified surface
+- At least one happy-path request per surface
 - At least one error case: missing required field, wrong type, or invalid ID
-- One 401/403 probe if the endpoint requires auth
+- One 401/403 probe if the surface requires auth
 
 ### 5. Check for credentials
 
@@ -103,89 +83,35 @@ Look for existing test credentials: `.env`, `.env.test`, fixture files, or seed 
 
 Do not create users, call registration endpoints, or seed data.
 
-### 6a. Start the server (HTTP projects)
+### 6a. Start the server (network changes)
 
-```bash
-go run ./cmd/api &
-SERVER_PID=$!
-```
+Run `commands_to_verify.serve` in the background, then poll the health endpoint until it answers (cap at ~20s). If server does not start: **STOP. Paste full startup output. Select Tests failed.**
 
-Or via Docker Compose (if DATABASE_URL is needed):
+### 6b. No network changes
 
-```bash
-docker compose up --build -d
-```
-
-Wait up to 20 seconds:
-
-```bash
-for i in $(seq 1 20); do curl -sf http://localhost:8080/health && break; sleep 1; done
-```
-
-Verify health and readiness:
-
-```bash
-curl -s http://localhost:8080/health
-curl -s http://localhost:8080/ready
-```
-
-Expected: `/health` → `{"status":"ok","version":"..."}` (200). `/ready` → `{"status":"ready"}` (200) or `{"status":"not_ready"}` (503) if DB is unreachable.
-
-If server does not start: **STOP. Paste full startup output. Select Tests failed.**
-
-### 6b. No HTTP changes
-
-Exercise changed packages directly:
-
-```bash
-go test -v -run . ./path/to/changed/package/...
-```
-
-Capture stdout and stderr. Assert on output content, not just exit code.
+Run a focused unit-test command against the changed packages. Capture stdout and stderr. Assert on output content, not just exit code.
 
 ### 7. Run smoke tests
 
-For each row in the test matrix:
+For each row in the test matrix, issue the request, capture status + body, and assert against the `expect` value. A `2xx` alone is **not** a pass — assert on response content. For **write operations**, re-fetch the resource to verify the side effect persisted.
 
-```bash
-RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X <METHOD> http://localhost:8080/<path> \
-  -H "Content-Type: application/json" \
-  [-H "Authorization: Bearer <token>"] \
-  [-d '<body>'])
-echo "$RESPONSE"
-```
+After all requests, kill the background server process.
 
-Record for each request:
-- HTTP status code
-- Full response body
-- Whether the expected field/value was present (`echo "$RESPONSE" | grep -q "<expected>" && echo PASS || echo FAIL`)
+### 7b. Browser smoke (UI changes only)
 
-A `2xx` alone is **not** a pass — assert on response content.
+Skip unless the diff touches the UI tree. Otherwise, exercise the live UI via the Playwright MCP server (registered in `.vscode/mcp.json`).
 
-For **write operations**, re-fetch the resource to verify the side effect persisted.
-
-After all requests:
-
-```bash
-kill $SERVER_PID 2>/dev/null
-# or: docker compose down
-```
-
-### 7b. Browser smoke (web changes only)
-
-Skip unless the diff touches files under `web/`. Otherwise, exercise the live UI via the Playwright MCP server (registered in `.vscode/mcp.json`). If the Playwright tools do not appear in the VS Code Copilot Chat tool palette after `.vscode/mcp.json` is added, the exact frontmatter name format may need adjustment — verify against the current Copilot Chat MCP docs (this file uses `mcp/playwright/<tool>` based on the closest existing convention in this repo).
-
-1. Confirm a server is reachable. Prefer the Vite dev server on `:5173` if `bun run dev` is running; otherwise the production same-origin SPA on `:8080`.
-2. Use #tool:mcp/playwright/browser_navigate to load the changed route (`/`, `/play`, etc.). Default to `/` if no route is implied by the diff.
-3. Use #tool:mcp/playwright/browser_snapshot and assert the expected route-level element is present (heading text, route container, expected nav state).
-4. For canvas-bearing pages (e.g. `/play`): use #tool:mcp/playwright/browser_take_screenshot and confirm the canvas is non-empty (a blank canvas is a FAIL).
+1. Confirm a server is reachable on whatever port `commands_to_verify.serve` exposes.
+2. Use #tool:mcp/playwright/browser_navigate to load the changed route. Default to `/` if no route is implied by the diff.
+3. Use #tool:mcp/playwright/browser_snapshot and assert the expected route-level element is present.
+4. For canvas-bearing pages: use #tool:mcp/playwright/browser_take_screenshot and confirm the canvas is non-empty (a blank canvas is a FAIL).
 5. Pull #tool:mcp/playwright/browser_console_messages and treat any `error`-level entry as a FAIL.
 6. Use #tool:mcp/playwright/browser_close to release the browser session.
 7. Record each step in the report under a **Browser Smoke** section: route, snapshot status, screenshot path (if any), console-error count.
 
 Any FAIL or blank-canvas result → **STOP. Select Tests failed.**
 
-**CI asymmetry (important):** Playwright MCP is **local-only**. CI (issue #23) does not run MCP servers — it keeps doing `make lint`, `go test`, web `lint` + `test` + `build`. Browser smoke is an additional layer the local pipeline catches that CI cannot. Do not assume a green CI means the UI works.
+**CI asymmetry (important):** Playwright MCP is **local-only**. CI does not run MCP servers — browser smoke is an additional layer the local pipeline catches that CI cannot. Do not assume a green CI means the UI works.
 
 ### 8. Write the report and hand off
 
@@ -234,7 +160,7 @@ verification:               # every smoke_endpoint from HANDOFF:IMPLEMENTATION m
     status: 200
     content_check: '{"status":"ok"} present'
     result: PASS
-  - route: /play            # browser-smoke entries when diff touches web/
+  - route: /                # browser-smoke entries when diff touches UI
     snapshot: PASS
     screenshot: <path or "n/a">
     console_errors: 0

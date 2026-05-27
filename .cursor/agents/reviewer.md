@@ -60,9 +60,9 @@ gh pr checks <pr_number>
 
 - **Only if all checks are green** — proceed to the Bastion conventions check and review checklist below.
 
-## Bastion conventions (required)
+## Conventions (required)
 
-Read repo-root **AGENTS.md** first, then `.cursor/agents/_bastion-conventions.md`, and **`docs/pipeline-handoff-schema.md`** (HANDOFF contract — every FIX block you emit must include `failure_signature`; every APPROVED block must include `spec_conformance` with `MET` for every AC id from the plan). **Blocking** if the diff violates architecture rules or smoke-tester skipped mandatory E2E for API changes.
+Read `.cursor/agents/_bastion-conventions.md` and the HANDOFF schema in `.claude/commands/pipeline.md` (every FIX block you emit must include `failure_signature`; every APPROVED block must include `spec_conformance` with `MET` for every AC id from the plan). **Blocking** if the diff violates the host project's conventions or smoke-tester skipped mandatory E2E for a network-surface change.
 
 ## Spec-conformance pass (mandatory, before the checklist below)
 
@@ -87,8 +87,8 @@ Evaluate the change set against:
 
 1. **Correctness** — Meets issue acceptance criteria; no obvious logic bugs
 2. **Security** — No secrets in diff, safe input handling, auth boundaries respected
-3. **Conventions** — Matches Bastion subsystem layout (`docs/backend-architecture.md`); no layered `repositories/` tree; domain packages free of `net/http`
-4. **E2E evidence** — `HANDOFF:VERIFIED` includes live `curl` results for every new/changed HTTP route; reject if missing for API work
+3. **Conventions** — Matches the host project's layout and patterns (read surrounding code to confirm)
+4. **E2E evidence** — `HANDOFF:VERIFIED` includes live evidence for every new/changed network surface; reject if missing
 5. **Scope** — No unrelated changes; migrations/config justified
 6. **Tests** — Adequate coverage for risk introduced (trust smoke-tester evidence, but spot-check test quality in diff)
 
@@ -167,38 +167,9 @@ verification_reference: |
 non_blocking_notes:
   - <suggestions/nits, if any>
 
-retrospective: |
-  <One short line: what was surprising about this PR, or what — if it had been
-  documented in AGENTS.md / docs/ from the start — would have prevented a re-run
-  or saved a review cycle. If nothing, write "nothing to record". Always emit
-  this field, even on CLEAN verdicts.>
-
 next_agent: none
 ---END HANDOFF---
 ```
-
-## Lesson enforcement (when promoting LEARNINGS to AGENTS.md)
-
-If a `LEARNINGS.md` entry has appeared twice or more, promote it to `AGENTS.md` AND, where the lesson is mechanical, also create a deterministic enforcement artifact:
-
-- "Don't import X from Y" → a `grep` pre-commit check under `scripts/` or a `golangci-lint` rule.
-- "Always assert response body, not just status" → a smoke-tester checklist line is not enough — add a test helper.
-- "Forgot to register route in NewHandler" → an integration test that fails if a known endpoint is missing.
-
-Prose lessons rot. Enforced lessons compound. See "Enforced lessons" in `AGENTS.md`.
-
-### 0. Append retrospective to LEARNINGS.md (required on approval, before commit)
-
-Before staging anything, **change to the repo root** and append one line to `LEARNINGS.md` using the bare relative path:
-
-```powershell
-Set-Location (git rev-parse --show-toplevel)
-Add-Content -Path LEARNINGS.md -Value "- $(Get-Date -Format yyyy-MM-dd) #<pr_number>: <retrospective text>" -Encoding utf8
-```
-
-**Path rules (mandatory):** use the literal string `LEARNINGS.md` only. Never use an absolute path like `C:\Users\...\LEARNINGS.md` and never use backslashes — PowerShell will create a junk file named after the entire mangled path string. If you see a file named `CUsersJCarlsson...LEARNINGS.md` in the repo root, that is this bug — delete it and redo the append correctly.
-
-If the retrospective is `nothing to record`, skip the append. The `LEARNINGS.md` change goes in the same commit as the rest of the issue work in step 1 — do not split it into its own commit. The compound value of this file is the entire reason this step exists; if you find the same line being appended twice, that is the signal to promote the lesson to `AGENTS.md`.
 
 ### 1. Commit (required on approval)
 
@@ -210,10 +181,9 @@ git diff
 git log --oneline -5   # match commit message style
 ```
 
-- Stage only files that belong to the issue (never `.env`, credentials, or build artifacts like `api.exe`).
-- If `go.mod` changed, run `go mod tidy` and include `go.sum` if updated.
+- Stage only files that belong to the issue (never `.env`, credentials, or build artifacts).
 - One focused commit (or a small logical series if already partially committed).
-- Message: imperative summary aligned with issue title (e.g. `feat(backend): add health API with minmux`).
+- Message: imperative summary aligned with issue title (e.g. `feat(scope): <issue title>`).
 - **Never** add `Co-authored-by` or other AI/Cursor attribution trailers.
 
 If the working tree is already clean with commits on the branch, skip creating a new commit and proceed to push.

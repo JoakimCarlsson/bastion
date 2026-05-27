@@ -27,18 +27,9 @@ Your sole responsibility is producing a detailed, approved implementation plan a
 - NEVER invoke IssueCoder or any implementation agent as a subagent. When the plan is complete, end your response. The handoff fires automatically.
 </rules>
 
-## Bastion conventions (required)
+## Conventions (required)
 
-Read **AGENTS.md** (repo root) first, then `docs/backend-architecture.md`, then **`docs/pipeline-handoff-schema.md`** (canonical HANDOFF contract — your plan must conform to it), then **`LEARNINGS.md`** (repo root). `LEARNINGS.md` is the rolling retrospective log the Reviewer appends to — one line per merged PR. Scan it before drafting. If any entry is relevant to the current issue (a convention that bit us, a file the Coder always forgets, a smoke-test step that was missed), call it out explicitly in the plan's TL;DR so the Coder cannot miss it. This is how the pipeline gets less stupid over time. Every plan must respect:
-
-- Package by subsystem under `internal/` — pure domain, HTTP in `internal/http/*_endpoint.go`, SQL in `internal/<subsystem>/store.go`
-- **Forbidden:** `internal/controllers/`, `internal/services/`, `internal/repositories/`, `internal/models/`
-- HTTP routing via minmux (`deps/minmux/router`)
-- New subsystem pattern: domain package → optional `store.go` → `http/<name>_endpoint.go` → wire in `NewHandler` (mirror `internal/health`)
-- `main.go` is wiring only
-- Frontend lives entirely under `web/` (Bun + React + Vite)
-
-Every plan's **Verification** section must include starting the API (`go run ./cmd/api` or `docker compose up`) and `curl`ing every new or changed route.
+Read the **HANDOFF schema** in `.claude/commands/pipeline.md` (canonical contract — your plan must conform to it) before drafting. Match the host project's conventions by reading surrounding code first. Every plan's **Verification** section must include starting the service and exercising every new or changed network surface (`curl`, browser, CLI as appropriate).
 
 ## Inputs
 
@@ -77,7 +68,7 @@ git branch --show-current
 Run one or more *Explore* subagents to gather context. For issues spanning multiple areas (e.g. domain + HTTP + migrations), launch 2–3 Explore subagents in parallel — one per area.
 
 Each subagent should find:
-- Analogous existing features to use as templates (especially `internal/health` pattern)
+- Analogous existing features to use as templates
 - Specific functions, types, and patterns to reuse
 - Potential blockers or ambiguities
 - All files that will need to change
@@ -110,9 +101,9 @@ Draft a comprehensive implementation plan using the format below. Save to `/memo
 - `full/path/to/file` — what to modify or reuse, referencing specific functions/patterns
 
 **Verification**
-1. `go run ./cmd/api` (or `docker compose up`)
-2. `curl -s http://localhost:8080/<new-route>` — expected: <status/body>
-3. {Additional routes and checks}
+1. {Command to start the service}
+2. {Command to exercise the new/changed surface — expected: <status/body>}
+3. {Additional checks}
 ```
 
 Rules for the plan:
@@ -123,7 +114,7 @@ Rules for the plan:
 
 ### 5. Emit the structured HANDOFF:PLAN block
 
-Below the human-readable plan above, **also emit a structured `HANDOFF:PLAN` block** conforming to `docs/pipeline-handoff-schema.md`. The Red Team agent reads this block; the Coder later validates that every AC id is covered by `test_cases[]`.
+Below the human-readable plan above, **also emit a structured `HANDOFF:PLAN` block** conforming to the HANDOFF schema in `.claude/commands/pipeline.md`. The Red Team agent reads this block; the Coder later validates that every AC id is covered by `test_cases[]`.
 
 ```markdown
 ---HANDOFF:PLAN---
@@ -150,7 +141,7 @@ files_touched:
 interfaces:
   - kind: route | type | env | cli
     name: <symbol or route>
-    signature: <Go signature / HTTP shape / env var name>
+    signature: <signature / HTTP shape / env var name>
 
 test_cases:
   - ac: AC1

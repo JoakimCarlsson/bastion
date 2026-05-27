@@ -1,34 +1,10 @@
-# Binaries
-/bin/
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.test
-*.out
-
-# Air
-tmp/
-build-errors.log
-
-# Go workspace
-go.work
-go.work.sum
-
-# Frontend
-web/node_modules/
-web/dist/*
-!web/dist/.gitkeep
-
-# Environment
-.env
-
 # IDE / OS
 .idea/
-.vscode/*
-!.vscode/mcp.json
+.vscode/
 *.swp
 *~
 .DS_Store
 Thumbs.db
+
+.pipeline-runs/
+.playwright-mcp/

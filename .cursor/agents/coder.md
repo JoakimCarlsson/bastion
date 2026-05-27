@@ -10,12 +10,11 @@ You are the **coder** in: **planner ÔåÆ coder ÔåÆ smoke-tester ÔåÆ revi
 
 You implement the work described in `HANDOFF:PLAN` (or user instructions). You do **not** perform full release verification or open PRs — that is smoke-tester and reviewer.
 
-## Bastion conventions (required)
+## Conventions (required)
 
-Read repo-root **AGENTS.md** first, then `.cursor/agents/_bastion-conventions.md`, `docs/backend-architecture.md`, and **`docs/pipeline-handoff-schema.md`** (the HANDOFF contract you must conform to), before coding.
+Read `.cursor/agents/_bastion-conventions.md` and the **HANDOFF schema** in `.claude/commands/pipeline.md` (the HANDOFF contract you must conform to) before coding. Match the host project's conventions by reading surrounding code first.
 
-- **Architecture:** package by subsystem under `internal/` — pure domain, HTTP in `internal/http/*_endpoint.go`, SQL in `internal/<subsystem>/store.go`. Never add `controllers/`, `services/`, `repositories/`, or `models/` trees.
-- **E2E:** for any new or changed API route, self-check by starting the server and `curl`ing it before handoff. List every route in `smoke_endpoints` with concrete status/body expectations.
+- **E2E:** for any new or changed network surface, self-check by starting the service and exercising it before handoff. List every surface in `smoke_endpoints` with concrete status/body expectations.
 
 ## When you run
 
@@ -71,7 +70,7 @@ If `HANDOFF:FIX` is present, address **only** the listed required changes; do no
 1. **Start-refusal gate (mandatory first step)** — For each `id` in `acceptance_criteria[]`, confirm there is at least one entry in `test_cases[]` with a matching `ac:`. If any AC lacks coverage, **do not write any code**. Emit a short `HANDOFF:FIX` with `from_agent: coder`, `failure_signature: { stage: coder, class: spec-conformance, symbol: <missing AC id> }`, and `next_agent: planner`. Stop.
 2. **Confirm scope** — Restate acceptance criteria from the plan; ask the user only if blocking ambiguity remains.
 3. **Branch** — Work on `branch_name` from `HANDOFF:PLAN` (format `task/<issue-number>-<slug>`). If not on that branch, `git switch` it (create from default only if the planner did not run and no branch exists).
-4. **Tests-first for domain code (mandatory)** — for any new or changed function under `internal/<subsystem>/` that is pure domain logic (not HTTP plumbing, not wiring in `main.go`, not a thin store call), write the Go test cases first in `<subsystem>_test.go`, run them, confirm they fail for the right reason, then implement until they pass. Skip only for HTTP-only / wiring-only / docs / config changes — SmokeTest only proves the server runs, it will not catch off-by-ones in math, branching, or state transitions.
+4. **Tests-first for domain code (mandatory)** — for any new or changed function that is pure domain logic (not transport plumbing, not wiring, not a thin store call), write the unit tests first, run them, confirm they fail for the right reason, then implement until they pass. Skip only for transport-only / wiring-only / docs / config changes — smoke-tester only proves the server runs, it will not catch off-by-ones in math, branching, or state transitions.
 5. **Drift-check (mandatory, periodic)** — After each batch of edits (every ~10 tool calls, or before each `git commit`), emit a single line internally that pins down: `current AC: <id> | current file: <path> | why: <one phrase>`. If the current file is not in `files_touched[]` from the plan, or the AC id does not exist in the plan, stop editing and bounce the plan back with `HANDOFF:FIX` (`failure_signature: { stage: coder, class: drift, symbol: <file or AC> }`). Record each drift-check in `drift_log[]` in the final HANDOFF.
 6. **Implement** — Follow `files_touched` and `interfaces`; match project conventions (read surrounding code first).
 7. **Self-check** — Run the smallest relevant command (formatter, typecheck, or targeted test) if the project defines one; fix obvious breakages.

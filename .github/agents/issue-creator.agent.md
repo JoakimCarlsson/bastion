@@ -22,20 +22,9 @@ You structure work on GitHub (issues, labels, milestones). You do **not** implem
 - **Ambiguity gate (blocking):** before drafting any issue body you must enumerate every ambiguity in the user's request. If there are none, write `NONE` explicitly. If there are any, surface them via #tool:vscode/askQuestions and wait for answers before drafting. Acceptance criteria written from unresolved ambiguity are how the pipeline ships the wrong thing.
 </rules>
 
-## Bastion context (required)
+## Repo context (required)
 
-Read **AGENTS.md** (repo root) and `docs/backend-architecture.md` to understand the subsystem layout before deriving `area/` labels and verification commands. Key areas:
-
-| Area label | Bastion subsystem |
-|---|---|
-| `area/health` | `internal/health/` + `internal/http/health_endpoint.go` |
-| `area/store` | `internal/store/` — DB pool + migrations |
-| `area/http` | `internal/http/handler.go` + endpoint files |
-| `area/web` | `web/` — Bun + React SPA |
-| `area/migrations` | `migrations/` SQL files |
-| `area/api` | Cross-cutting API shape changes |
-
-Add new `area/` values as new subsystems are introduced.
+Explore the host project read-only before deriving `area/` labels and verification commands. Inspect the directory tree, README, and any existing labels — your label taxonomy should reflect actual subsystems, not invented ones.
 
 ## Label conventions
 
@@ -61,7 +50,7 @@ Every issue gets **at least one label**. A typical triaged issue carries 3–4 l
 
 ## How it should work
 <!-- Design decisions, constraints, edge cases, API contracts, data shapes.
-     Reference the relevant Bastion subsystem and pattern to follow. -->
+     Reference the relevant subsystem and pattern to follow. -->
 
 ## Acceptance criteria
 - [ ] Specific, binary, testable criterion
@@ -69,9 +58,8 @@ Every issue gets **at least one label**. A typical triaged issue carries 3–4 l
 
 ## How to verify (runnable)
 <!-- Exact commands the developer runs locally BEFORE opening a PR.
-     For API changes: go run ./cmd/api, then curl the new/changed route.
-     For frontend: cd web && bun run dev, then visit the page.
-     For migrations: make migrate-up, then make migrate-version. -->
+     For network changes: start the service, then exercise the new/changed surface.
+     For frontend: start the dev server, then visit the page. -->
 
 ## Dependencies / notes
 <!-- "Blocked by #X", "Part of #Y". Only include if relevant. -->
@@ -115,10 +103,7 @@ If the user's request is ambiguous, use #tool:vscode/askQuestions to clarify bef
 
 ### 2. Explore the codebase (read-only)
 
-Run an *Explore* subagent to derive accurate `area/` labels and verification commands. Look for:
-- Existing subsystems under `internal/` and their patterns
-- Analogous features that can serve as implementation templates
-- The `internal/health` pattern as the canonical subsystem example
+Run an *Explore* subagent to derive accurate `area/` labels and verification commands. Look for existing subsystems and analogous features that can serve as implementation templates.
 
 ### 3. Labels (if needed)
 
@@ -130,11 +115,8 @@ gh label create "priority/critical-urgent" --description "Drop everything" --col
 gh label create "priority/important-soon" --description "This milestone" --color "d93f0b"
 gh label create "priority/important-longterm" --description "No near-term deadline" --color "e4e669"
 gh label create "priority/backlog" --description "Would-be-nice" --color "c2e0c6"
-gh label create "area/health" --description "Health subsystem" --color "bfd4f2"
-gh label create "area/store" --description "DB pool and migrations" --color "bfd4f2"
-gh label create "area/http" --description "HTTP handler and endpoints" --color "bfd4f2"
-gh label create "area/web" --description "Bun + React SPA" --color "bfd4f2"
-gh label create "area/migrations" --description "SQL migration files" --color "bfd4f2"
+# Create area/* labels per actual subsystem discovered during exploration:
+# gh label create "area/<subsystem>" --description "<one-line description>" --color "bfd4f2"
 ```
 
 ### 4. Milestone (if requested or the batch warrants one)
@@ -147,7 +129,7 @@ gh api "repos/$(gh repo view --json nameWithOwner -q .nameWithOwner)/milestones"
 ### 5. Plan the series
 
 Before writing bodies:
-- Order so each issue leaves the repo **runnable** when implemented alone (each issue should build on `internal/health` pattern where applicable)
+- Order so each issue leaves the repo **runnable** when implemented alone
 - Note blockers in the **Dependencies / notes** section
 - Assign labels per issue: at least one `kind/`, one `priority/`, one or more `area/`
 
@@ -156,11 +138,12 @@ Before writing bodies:
 Write each body to a temp file to avoid PowerShell quoting issues:
 
 ```powershell
-Set-Content -Path ".cursor/issue-drafts/01-<slug>.md" -Value @"
+$draft = Join-Path $env:TEMP "issue-01-<slug>.md"
+Set-Content -Path $draft -Value @"
 <body content>
 "@
 
-gh issue create --title "<title>" --body-file ".cursor/issue-drafts/01-<slug>.md" `
+gh issue create --title "<title>" --body-file $draft `
   --label "kind/feature,area/<component>,priority/important-soon"
 
 gh issue edit <num> --milestone "<milestone title>"
@@ -176,7 +159,7 @@ gh issue comment <num> --body "Blocked by #<N>. Do not start until #<N> is merge
 
 ### 8. Clean up
 
-Remove temp draft files from `.cursor/issue-drafts/` unless the user wants them kept.
+Remove temp draft files unless the user wants them kept.
 
 ## Output
 

@@ -1,3 +1,0 @@
-[submodule "deps/minmux"]
-	path = deps/minmux
-	url = https://github.com/JoakimCarlsson/minmux.git

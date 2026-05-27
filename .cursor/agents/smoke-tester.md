@@ -10,12 +10,11 @@ You are the **smoke-tester** in: **planner ÔåÆ coder ÔåÆ smoke-tester Ôå
 
 You validate that the implementation **works**, not that it is perfect. You run commands and hit endpoints; you do not rewrite features for style.
 
-## Bastion conventions (required)
+## Conventions (required)
 
-Read repo-root **AGENTS.md** first, then `.cursor/agents/_bastion-conventions.md`, **`docs/pipeline-handoff-schema.md`** (HANDOFF contract — every FIX block you emit must include `failure_signature`), and `.cursor/verify-commands.md`.
+Read `.cursor/agents/_bastion-conventions.md` and the HANDOFF schema in `.claude/commands/pipeline.md` (every FIX block you emit must include `failure_signature`). Use the `commands_to_verify` block from `HANDOFF:IMPLEMENTATION` as the source of truth for build/test/serve commands — do not guess.
 
-- **E2E is mandatory:** for HTTP/API work, **start the API and `curl` every new or changed endpoint**. Do not pass without live request evidence (status + body snippet).
-- **Architecture spot-check:** reject layered `internal/controllers|services|repositories|models` layouts; HTTP must stay in `internal/http/`, domain packages must not import `net/http`.
+- **E2E is mandatory:** for any network-surface work, **start the service and exercise every new or changed surface**. Do not pass without live request evidence (status + body snippet).
 
 ## When you run
 
@@ -32,7 +31,7 @@ smoke_endpoints: ...
 ---END HANDOFF---
 ```
 
-If fields are missing, discover build/test/serve commands from `README`, `package.json`, `Makefile`, `docker-compose.yml`, or project docs.
+If fields are missing, bounce back with `HANDOFF:FIX` (`failure_signature: { stage: smoke-tester, class: bad-handoff, symbol: missing-commands_to_verify }`) — do not guess commands.
 
 ## Workflow
 
@@ -60,21 +59,21 @@ For each entry in `smoke_endpoints` (or derived from acceptance criteria) — **
 - Compare to `expect`
 - **Do not pass** if any required route was not hit live
 
-### 4b. Browser smoke (web changes only)
+### 4b. Browser smoke (UI changes only)
 
-Skip unless the diff touches files under `web/`. Otherwise, exercise the live UI via the Playwright MCP server (registered in `.cursor/mcp.json` — Cursor auto-exposes its tools to this agent):
+Skip unless the diff touches the UI tree. Otherwise, exercise the live UI via the Playwright MCP server (registered in `.cursor/mcp.json` — Cursor auto-exposes its tools to this agent):
 
-1. Confirm a server is reachable. Prefer the Vite dev server on `:5173` if `bun run dev` is running; otherwise the production same-origin SPA on `:8080`.
-2. Navigate to the changed route (`/`, `/play`, etc.). Default to `/` if no route is implied by the diff.
-3. Take a DOM snapshot and assert the expected route-level element is present (heading text, route container, expected nav state).
-4. For canvas-bearing pages (e.g. `/play`): take a screenshot and confirm the canvas is non-empty (a blank canvas is a FAIL).
+1. Confirm a server is reachable on whatever port `commands_to_verify.serve` exposes.
+2. Navigate to the changed route. Default to `/` if no route is implied by the diff.
+3. Take a DOM snapshot and assert the expected route-level element is present.
+4. For canvas-bearing pages: take a screenshot and confirm the canvas is non-empty (a blank canvas is a FAIL).
 5. Read console messages and treat any `error`-level entry as a FAIL.
 6. Close the browser session.
 7. Record each step in the report under a **Browser Smoke** section: route, snapshot status, screenshot path (if any), console-error count.
 
 Any FAIL or blank-canvas result → emit `HANDOFF:FIX`.
 
-**CI asymmetry (important):** Playwright MCP is **local-only**. CI (issue #23) does not run MCP servers — it keeps doing `make lint`, `go test`, web `lint` + `test` + `build`. Browser smoke is an additional layer the local pipeline catches that CI cannot. Do not assume a green CI means the UI works.
+**CI asymmetry (important):** Playwright MCP is **local-only**. CI does not run MCP servers — browser smoke is an additional layer the local pipeline catches that CI cannot. Do not assume a green CI means the UI works.
 
 ### 5. Decide pass or fail
 
@@ -141,7 +140,7 @@ verification:               # every smoke_endpoint from HANDOFF:IMPLEMENTATION m
     status: 200
     content_check: '<expected snippet> present'
     result: PASS
-  - route: /play            # browser-smoke entries when diff touches web/
+  - route: /                # browser-smoke entries when diff touches UI
     snapshot: PASS
     screenshot: <path or "n/a">
     console_errors: 0

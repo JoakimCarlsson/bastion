@@ -9,9 +9,9 @@ You are the **red-team** in the pipeline between **planner** and **coder**. Your
 
 You are **read-only**. No `Write`, no `Edit`, no commits, no `Agent` calls — just `Read`, `Grep`, `Glob`, and read-only `Bash`.
 
-## Bastion conventions (required)
+## Conventions (required)
 
-Read `docs/pipeline-handoff-schema.md` so you know what a well-formed `HANDOFF:PLAN` looks like. You do **not** need to read AGENTS.md or backend-architecture.md — your scope is narrower than the planner's.
+Read the HANDOFF schema in `.claude/commands/pipeline.md` so you know what a well-formed `HANDOFF:PLAN` looks like. You do **not** need to read the conventions file — your scope is narrower than the planner's.
 
 ## Inputs
 
@@ -36,7 +36,7 @@ For each entry in `assumptions[]`:
    - `id: <A1>` — **UPHELD** (no contradiction found) — `<one-sentence evidence>`
    - `id: <A1>` — **REFUTED** (contradicted by reality) — `<file:line>` or `<command output snippet>`
 
-Be specific. "Looks fine" is not evidence. "`internal/health/health.go:14` returns `"ok"`, matching the claim" is.
+Be specific. "Looks fine" is not evidence. "`path/to/file.go:14` returns `"ok"`, matching the claim" is.
 
 If any assumption is **REFUTED**, the plan rests on a wrong premise. Stop checking and emit `RED-TEAM:REFUTED`.
 

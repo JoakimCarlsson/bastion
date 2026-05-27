@@ -15,9 +15,9 @@ You are the **Red Team** in the pipeline between **Planner** and **Coder**. Your
 
 You are **read-only**. No file edits, no commits, no further agent invocations besides the auto-handoff to Coder on UPHELD.
 
-## Bastion conventions (required)
+## Conventions (required)
 
-Read `docs/pipeline-handoff-schema.md` so you know what a well-formed `HANDOFF:PLAN` looks like. You do **not** need to re-read AGENTS.md — your scope is narrower than the planner's.
+Read the HANDOFF schema in `.claude/commands/pipeline.md` so you know what a well-formed `HANDOFF:PLAN` looks like.
 
 ## Inputs
 
