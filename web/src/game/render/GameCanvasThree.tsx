@@ -231,16 +231,36 @@ interface CameraRigProps {
 const DEFAULT_OFFSET = new THREE.Vector3(0, 1.4, 1.0).normalize();
 const DEFAULT_FOV = 45;
 
+// Module-scope constants so PerspectiveCamera's position and OrbitControls'
+// target props are referentially stable across renders. Inline array literals
+// would cause drei to re-apply these props on every Scene re-render, resetting
+// the user's camera after tower placement or state changes.
+const INITIAL_CAMERA_POSITION: [number, number, number] = [
+  0,
+  DEFAULT_OFFSET.y * 14,
+  DEFAULT_OFFSET.z * 14,
+];
+const ORBIT_TARGET: [number, number, number] = [0, 0, 0];
+
 function CameraRig({ cols, rows }: CameraRigProps) {
   const { camera, size } = useThree();
+  // Guard: only set camera position on initial mount (and genuine container resize).
+  // Without this guard, any change that causes useThree() to return a new size
+  // reference would reset the user's dragged camera position.
+  const hasInit = useRef(false);
 
   useEffect(() => {
     if (!(camera instanceof THREE.PerspectiveCamera)) return;
-    const aspect = size.width / size.height;
-    const d = fitDistance(cols, rows, DEFAULT_FOV, aspect);
-    camera.position.copy(DEFAULT_OFFSET.clone().multiplyScalar(d));
-    camera.lookAt(0, 0, 0);
-    camera.updateProjectionMatrix();
+    // On resize after the first mount, only recompute distance — do not reset
+    // rotation/lookAt so the user's dragged orientation is preserved.
+    if (!hasInit.current) {
+      hasInit.current = true;
+      const aspect = size.width / size.height;
+      const d = fitDistance(cols, rows, DEFAULT_FOV, aspect);
+      camera.position.copy(DEFAULT_OFFSET.clone().multiplyScalar(d));
+      camera.lookAt(0, 0, 0);
+      camera.updateProjectionMatrix();
+    }
   }, [camera, size, cols, rows]);
 
   return null;
@@ -369,18 +389,23 @@ function Scene({ map, towers, enemies, onCellClick }: SceneProps) {
       {/* Camera rig adjusts position on container resize */}
       <CameraRig cols={cols} rows={rows} />
 
-      {/* Perspective camera tilted to show 3D meshes — initial position set by CameraRig */}
+      {/* Perspective camera tilted to show 3D meshes — initial position set by CameraRig.
+           IMPORTANT: position uses the module-scope INITIAL_CAMERA_POSITION constant so the
+           prop reference is stable across renders. An inline array literal would be a new
+           identity every render and drei would re-apply it, resetting the user's camera. */}
       <PerspectiveCamera
         makeDefault
         fov={DEFAULT_FOV}
         near={0.1}
         far={100}
-        position={[0, DEFAULT_OFFSET.y * 14, DEFAULT_OFFSET.z * 14]}
+        position={INITIAL_CAMERA_POSITION}
       />
 
-      {/* OrbitControls — drag rotates, scroll zooms; pan disabled; polar/distance clamped */}
+      {/* OrbitControls — drag rotates, scroll zooms; pan disabled; polar/distance clamped.
+           IMPORTANT: target uses the module-scope ORBIT_TARGET constant (referentially
+           stable) to prevent drei from resetting the orbital target on each re-render. */}
       <OrbitControls
-        target={[0, 0, 0]}
+        target={ORBIT_TARGET}
         enablePan={false}
         enableZoom={true}
         enableDamping={true}

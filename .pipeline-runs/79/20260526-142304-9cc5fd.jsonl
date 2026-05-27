@@ -1,0 +1,1 @@
+﻿{"attempt":0,"verdict":"ERROR","stage":"reviewer","tokens_total":180849,"tokens_out":0,"tokens_in":0,"notes":"user rejected before reviewer ran: HUD should be inside R3F canvas (drei \u003cHtml\u003e / scene), not DOM overlays; camera resets on tower placement — both must be fixed in this PR"}

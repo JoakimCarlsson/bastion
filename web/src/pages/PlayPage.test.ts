@@ -206,3 +206,173 @@ describe('PlayPage keyboard shortcut wiring (AC2)', () => {
     expect(source).toContain('aria-keyshortcuts="Space"');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #79 — HUD shell: top bar, right rail, bottom-right cluster
+// ---------------------------------------------------------------------------
+
+// Strip JSX comments ({/* … */}) for clean counting
+const sourceNoJsxComments = source.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+
+describe('#79 HUD shell — pointer-events layout (AC4)', () => {
+  it('has exactly one pointer-events-none overlay container', () => {
+    // Count className usages only (not JSX comments)
+    const matches = sourceNoJsxComments.match(/pointer-events-none/g) ?? [];
+    expect(matches.length).toBe(1);
+  });
+
+  it('has at least three pointer-events-auto panels', () => {
+    const matches = source.match(/pointer-events-auto/g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('GameCanvasThree is a sibling of the pointer-events-none overlay (not nested inside)', () => {
+    // GameCanvasThree must appear BEFORE the pointer-events-none container in source
+    const canvasIdx = source.indexOf('<GameCanvasThree');
+    const overlayIdx = source.indexOf('pointer-events-none');
+    expect(canvasIdx).toBeGreaterThan(-1);
+    expect(overlayIdx).toBeGreaterThan(-1);
+    expect(canvasIdx).toBeLessThan(overlayIdx);
+  });
+});
+
+describe('#79 HUD shell — top bar region (AC1)', () => {
+  it('top bar contains Wave label', () => {
+    // The top-bar opening marker is the first pointer-events-auto panel
+    const topBarStart = source.indexOf('HUD top bar');
+    expect(topBarStart).toBeGreaterThan(-1);
+    // Wave label must appear after top-bar start
+    const waveIdx = source.indexOf('Wave', topBarStart);
+    expect(waveIdx).toBeGreaterThan(-1);
+  });
+
+  it('top bar contains Gold (or Shared Gold) label', () => {
+    const topBarStart = source.indexOf('HUD top bar');
+    expect(topBarStart).toBeGreaterThan(-1);
+    const goldIdx = source.indexOf('Gold', topBarStart);
+    expect(goldIdx).toBeGreaterThan(-1);
+  });
+
+  it('top bar contains Base HP (or Shared Base HP) label', () => {
+    const topBarStart = source.indexOf('HUD top bar');
+    expect(topBarStart).toBeGreaterThan(-1);
+    const hpIdx = source.indexOf('Base HP', topBarStart);
+    expect(hpIdx).toBeGreaterThan(-1);
+  });
+
+  it('top bar contains PhasePill before right rail region', () => {
+    const topBarStart = source.indexOf('HUD top bar');
+    const rightRailStart = source.indexOf('Right rail');
+    expect(topBarStart).toBeGreaterThan(-1);
+    expect(rightRailStart).toBeGreaterThan(-1);
+    const phasePillIdx = source.indexOf('<PhasePill', topBarStart);
+    expect(phasePillIdx).toBeGreaterThan(-1);
+    expect(phasePillIdx).toBeLessThan(rightRailStart);
+  });
+
+  it('top bar region appears before right-rail region in source', () => {
+    const topBarIdx = source.indexOf('HUD top bar');
+    const rightRailIdx = source.indexOf('Right rail');
+    expect(topBarIdx).toBeGreaterThan(-1);
+    expect(rightRailIdx).toBeGreaterThan(-1);
+    expect(topBarIdx).toBeLessThan(rightRailIdx);
+  });
+
+  it('right-rail region appears before bottom-right cluster in source', () => {
+    const rightRailIdx = source.indexOf('Right rail');
+    const bottomRightIdx = source.indexOf('Bottom-right cluster');
+    expect(rightRailIdx).toBeGreaterThan(-1);
+    expect(bottomRightIdx).toBeGreaterThan(-1);
+    expect(rightRailIdx).toBeLessThan(bottomRightIdx);
+  });
+});
+
+describe('#79 HUD shell — co-op banner in top bar (AC5)', () => {
+  it('isCoopMode banner block is inside top bar (before right rail)', () => {
+    const topBarStart = source.indexOf('HUD top bar');
+    const rightRailStart = source.indexOf('Right rail');
+    expect(topBarStart).toBeGreaterThan(-1);
+    expect(rightRailStart).toBeGreaterThan(-1);
+    // Co-op session banner must appear between top bar and right rail markers
+    const bannerIdx = source.indexOf('Co-op session:', topBarStart);
+    expect(bannerIdx).toBeGreaterThan(-1);
+    expect(bannerIdx).toBeLessThan(rightRailStart);
+  });
+
+  it('co-op banner is still guarded by isCoopMode &&', () => {
+    const bannerIdx = source.indexOf('Co-op session:');
+    expect(bannerIdx).toBeGreaterThan(-1);
+    // isCoopMode must appear before the banner text
+    const prior = source.substring(0, bannerIdx);
+    expect(prior).toContain('isCoopMode &&');
+  });
+});
+
+describe('#79 HUD shell — right rail (AC2)', () => {
+  it('right rail panel has w-64 or w-72 width class', () => {
+    const rightRailStart = source.indexOf('Right rail');
+    expect(rightRailStart).toBeGreaterThan(-1);
+    // w-64, w-72, or w-[280px] must appear within 300 chars of the marker
+    const region = source.substring(rightRailStart, rightRailStart + 300);
+    expect(region).toMatch(/w-64|w-72|w-\[280px\]/);
+  });
+
+  it('tower-button .map iteration is inside the right-rail region', () => {
+    const rightRailStart = source.indexOf('Right rail');
+    const bottomRightStart = source.indexOf('Bottom-right cluster');
+    expect(rightRailStart).toBeGreaterThan(-1);
+    expect(bottomRightStart).toBeGreaterThan(-1);
+    // towerDefs.map must appear between right rail and bottom-right cluster
+    const towerMapIdx = source.indexOf('towerDefs.map', rightRailStart);
+    expect(towerMapIdx).toBeGreaterThan(-1);
+    expect(towerMapIdx).toBeLessThan(bottomRightStart);
+  });
+
+  it('right rail has an empty slot labelled for #88', () => {
+    const rightRailStart = source.indexOf('Right rail');
+    expect(rightRailStart).toBeGreaterThan(-1);
+    const slotIdx = source.indexOf('#88', rightRailStart);
+    expect(slotIdx).toBeGreaterThan(-1);
+  });
+});
+
+describe('#79 HUD shell — bottom-right cluster (AC3)', () => {
+  it('Start wave button is inside bottom-right cluster region', () => {
+    const clusterStart = source.indexOf('Bottom-right cluster');
+    expect(clusterStart).toBeGreaterThan(-1);
+    const startWaveIdx = source.indexOf('Start wave', clusterStart);
+    expect(startWaveIdx).toBeGreaterThan(-1);
+  });
+
+  it('New game button is gated by !isCoopMode inside cluster', () => {
+    const clusterStart = source.indexOf('Bottom-right cluster');
+    expect(clusterStart).toBeGreaterThan(-1);
+    const newGameIdx = source.indexOf('New game', clusterStart);
+    expect(newGameIdx).toBeGreaterThan(-1);
+    // !isCoopMode guard must be between cluster start and New game text
+    const between = source.substring(clusterStart, newGameIdx);
+    expect(between).toContain('!isCoopMode');
+  });
+
+  it('volume slider is inside bottom-right cluster region', () => {
+    const clusterStart = source.indexOf('Bottom-right cluster');
+    expect(clusterStart).toBeGreaterThan(-1);
+    const volumeIdx = source.indexOf('volume-slider', clusterStart);
+    expect(volumeIdx).toBeGreaterThan(-1);
+  });
+
+  it('mute button is inside bottom-right cluster region', () => {
+    const clusterStart = source.indexOf('Bottom-right cluster');
+    expect(clusterStart).toBeGreaterThan(-1);
+    // Look for muted/Sound toggle text
+    const muteIdx = source.indexOf("'Muted'", clusterStart);
+    expect(muteIdx).toBeGreaterThan(-1);
+  });
+
+  it('handleStartWave handler is still referenced in cluster', () => {
+    const clusterStart = source.indexOf('Bottom-right cluster');
+    expect(clusterStart).toBeGreaterThan(-1);
+    const handlerIdx = source.indexOf('handleStartWave', clusterStart);
+    expect(handlerIdx).toBeGreaterThan(-1);
+  });
+});
